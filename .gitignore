@@ -1,1 +1,14 @@
 .env
+.DS_Store
+__pycache__/
+.venv/
+*.pt
+*_ncnn_model/
+
+# AVG: frames and crops can contain plates -> never in git
+datasets/
+train/data/
+train/datasets/
+train/runs/
+train/labels.csv
+server/spool/

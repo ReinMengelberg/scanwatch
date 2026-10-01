@@ -1,0 +1,84 @@
+<!doctype html><meta name=viewport content="width=device-width,initial-scale=1">
+<title>Street cam</title>
+<style>
+ body{margin:0;font:15px system-ui,sans-serif;background:#1d2126;color:#e8e6e1}
+ img{display:block;width:100%;max-width:1280px;margin:0 auto;background:#000}
+ .controls{max-width:1280px;margin:0 auto;padding:16px;display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+ #pad{position:relative;width:min(320px,100%);aspect-ratio:290/190;background:#2a2f36;
+      border:1px solid #3d444d;border-radius:6px;touch-action:none;cursor:crosshair;flex:none}
+ #pad::before,#pad::after{content:"";position:absolute;background:#3d444d}
+ #pad::before{left:50%;top:0;bottom:0;width:1px}
+ #pad::after{top:var(--zero-y);left:0;right:0;height:1px}
+ #dot{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;
+      background:#e0b04a;box-shadow:0 0 0 3px #1d2126;pointer-events:none}
+ .side{display:grid;gap:12px;flex:1;min-width:220px}
+ label{display:grid;grid-template-columns:4em 1fr 4em;align-items:center;gap:12px}
+ output{text-align:right;font-variant-numeric:tabular-nums}
+ input{accent-color:#e0b04a}
+ p{margin:0;color:#9aa1a9;font-variant-numeric:tabular-nums}
+</style>
+<img src="/stream" alt="Live view">
+<div class=controls>
+ <div id=pad tabindex=0 aria-label="Pan and tilt. Drag, or use arrow keys."><div id=dot></div></div>
+ <div class=side>
+  <p id=pos></p>
+  <label>Zoom <input type=range id=zoom min=100 max=400 step=10><output id=zv></output></label>
+  <p>Drag the pad to aim. Arrow keys nudge 1&deg;, Shift+arrow 10&deg;.</p>
+  <p id=st></p>
+  <p><a href="/debug.jpg" target=_blank style="color:#e0b04a">ROI + live boxes</a> &middot; <a href="/status" target=_blank style="color:#e0b04a">status JSON</a></p>
+ </div>
+</div>
+<script>
+const P = {min: -145, max: 145}, T = {min: -90, max: 100};
+const pad = document.getElementById("pad"), dot = document.getElementById("dot");
+const pos = document.getElementById("pos"), zoom = document.getElementById("zoom"), zv = document.getElementById("zv");
+let s = {pan: 0, tilt: 0, zoom: 100}, pending = null, timer = null;
+pad.style.setProperty("--zero-y", (T.max / (T.max - T.min) * 100) + "%");
+
+function draw() {
+  dot.style.left = ((s.pan - P.min) / (P.max - P.min) * 100) + "%";
+  dot.style.top = ((T.max - s.tilt) / (T.max - T.min) * 100) + "%";
+  pos.textContent = `Pan ${s.pan}\u00b0, tilt ${s.tilt}\u00b0`;
+  zoom.value = s.zoom; zv.textContent = s.zoom + "%";
+}
+function send(q) {  // throttle to ~6 moves/s while dragging
+  pending = {...pending, ...q};
+  if (timer) return;
+  timer = setTimeout(() => {
+    fetch("/set?" + new URLSearchParams(pending), {method: "POST"});
+    pending = null; timer = null;
+  }, 150);
+}
+function aim(e) {
+  const r = pad.getBoundingClientRect();
+  const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  const y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+  s.pan = Math.round(P.min + x * (P.max - P.min));
+  s.tilt = Math.round(T.max - y * (T.max - T.min));
+  draw(); send({pan: s.pan, tilt: s.tilt});
+}
+pad.onpointerdown = e => { pad.setPointerCapture(e.pointerId); aim(e); };
+pad.onpointermove = e => { if (pad.hasPointerCapture(e.pointerId)) aim(e); };
+pad.onkeydown = e => {
+  const d = e.shiftKey ? 10 : 1;
+  const moves = {ArrowLeft: [-d, 0], ArrowRight: [d, 0], ArrowUp: [0, d], ArrowDown: [0, -d]}[e.key];
+  if (!moves) return;
+  e.preventDefault();
+  s.pan = Math.min(P.max, Math.max(P.min, s.pan + moves[0]));
+  s.tilt = Math.min(T.max, Math.max(T.min, s.tilt + moves[1]));
+  draw(); send({pan: s.pan, tilt: s.tilt});
+};
+zoom.oninput = () => { s.zoom = +zoom.value; draw(); };
+zoom.onchange = () => send({zoom: s.zoom});
+fetch("/state").then(r => r.json()).then(st => { s = st; draw(); });
+const stEl = document.getElementById("st");
+async function status() {
+  try {
+    const j = await (await fetch("/status")).json();
+    stEl.textContent = `motion ${(j.motion * 100).toFixed(1)}%${j.detecting ? " · detecting" : ""} · ` +
+      `${j.live_tracks} live · ${j.stats.tracks} stored · ${j.stats.ignored} ignored · ` +
+      `${j.stats.alerts} scan cars · upload queue ${j.upload.pending}` + (j.upload.last_error ? " · last error " + j.upload.last_error : "");
+  } catch (e) { stEl.textContent = "status unavailable"; }
+}
+status(); setInterval(status, 2000);
+</script>
