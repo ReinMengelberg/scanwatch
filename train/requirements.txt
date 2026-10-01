@@ -7,3 +7,5 @@ torch==2.14.1
 torchvision==0.29.1
 ultralytics==8.4.171
 boto3==1.43.106
+ncnn==1.0.20260526
+pnnx==20260526

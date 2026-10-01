@@ -28,7 +28,7 @@ dedupe:
 
 split:
   val_frac: 0.3                 # by event hash; 0 = everything in train
-  neg_cap: 10                   # max negatives per positive in train (hard negatives always kept)
+  neg_cap: 0                    # max negatives per positive in train, 0 = all (hard negatives always kept)
   seed: 0
 
 synth:
@@ -50,7 +50,13 @@ train:
   patience: 15
   fliplr: 0.5
   flipud: 0.0
-  erasing: 0.4
+  # The red stripes and the roof pod are the whole signal: keep both in every augmented crop.
+  auto_augment: null            # RandAugment's posterize/solarize/equalize wash out the red
+  hsv_h: 0.01                   # small hue shift: red stays red
+  hsv_s: 0.3
+  hsv_v: 0.4
+  scale: 0.15                   # random crop keeps >= 85% of the area, so the pod is not cut off
+  erasing: 0.2
 
 eval:
   topk: 3                       # track score = mean of top-k crop scores

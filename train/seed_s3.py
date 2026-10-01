@@ -15,21 +15,7 @@ from collections import defaultdict
 
 import cv2
 
-from scancar.common import ROOT, labelled_crops
-
-
-def s3_client():
-    env = ROOT.parent / "server" / ".env"
-    if env.exists():
-        for line in env.read_text().splitlines():
-            if line.startswith("S3_") and "=" in line:
-                k, v = line.split("=", 1)
-                os.environ.setdefault(k, v.split(" #")[0].strip())
-    import boto3
-
-    return boto3.client("s3", endpoint_url=os.environ["S3_ENDPOINT"], region_name=os.environ.get("S3_REGION"),
-                        aws_access_key_id=os.environ["S3_ACCESS_KEY_ID"],
-                        aws_secret_access_key=os.environ["S3_SECRET_ACCESS_KEY"]), os.environ["S3_BUCKET"]
+from scancar.common import ROOT, labelled_crops, s3_client
 
 
 def raw_frame(frame_path: str) -> bytes:

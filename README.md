@@ -13,7 +13,11 @@ Two small models, both running on the Pi:
 
 1. **Find the cars.** Stock COCO `yolo11n` (NCNN, 416 px) detects cars and trucks. No training needed.
 2. **Is it a scan car?** A tiny `yolo11n-cls` classifier (224 px) looks at crops of each car.
-   It only has to learn one thing: *roof pod or not*.
+   There is no hand-written rule: it learns from labelled crops, and a scan car shows two things a
+   normal white car doesn't, the **camera pod on the roof** and the **red diagonal stripes** on the
+   sides and the back (Gemeente Amsterdam livery). Training keeps both visible: no colour augmentation
+   that washes out the red, no random crop that cuts off the roof. Red-on-white vehicles that are
+   *not* scan cars (delivery vans, striped trucks) go in as hard negatives, so red alone is not enough.
 
 ![Scan car vs normal traffic](docs/img/scancar_vs_traffic.jpg)
 
@@ -33,13 +37,19 @@ Motion detection alone fires on pedestrians, cyclists, shadows and headlights. H
 detector; what gets stored is decided by three filters:
 
 - **Class filter**: only car/truck count. People and bikes are never tracked.
-- **ROI**: only the road counts, not the sidewalks or the bike racks.
+- **ROI**: only the road counts, not the sidewalks or the bike racks. The polygon follows the road
+  through its bend in the middle of the frame, and a car counts as on the road when the bottom centre of
+  its box (where the wheels touch) is inside it. Once a track is on the road it never jumps to a
+  detection outside it, so a passing car's track never hops onto the Tesla parked beside the road.
 - **Travel**: a track must move ≥ 15% of the frame width, so the parked Tesla in front of the window
   never becomes an upload, no matter how often someone walks by.
+- **No hopping**: once a track is on the road it never continues onto a box whose wheels are off the
+  road, so a car leaving the frame does not hand its track over to a car parked next to it.
 
 ![The ROI and where cars actually drove](docs/img/roi.jpg)
 
-<sub>Yellow: the ROI. Dots: where the wheels of passing cars touched the road (red: scan car, green: other traffic).</sub>
+<sub>Yellow: the ROI. Dots: where the wheels of passing cars touched the road (red: scan car, green: other traffic).
+The ROI is fitted to those points (the bottom-centre of each box), not to the kerbs.</sub>
 
 ```mermaid
 flowchart LR
@@ -71,15 +81,17 @@ The model gets better as the Pi collects data:
 ```
 server/                 runs on the Pi (Python 3.11)
   camserver/            camera, motion gate, detector, tracker, uploader, Discord, web UI
-  models/               NCNN detector models (git-ignored; exported by setup.sh or shipped by deploy.sh)
+  models/               NCNN models (git-ignored; the detector is exported by setup.sh)
   setup.sh              on the Pi: install deps, venv, models, systemd unit, restart
-  deploy.sh             from the Mac: sync over SSH, then run setup.sh on the Pi
   .env.example          all settings, copy to .env
   camserver.service     systemd unit (installed by setup.sh)
 train/                  runs on the Mac (Python 3.12, PyTorch MPS)
   scancar/              shared code; crop.py is a symlink to server/camserver/crop.py
   bootstrap.py          frames -> labelled car crops
+  pull.py               S3 -> ../datasets/s3, index the Pi's tracks for labelling
   label.py              review UI (http://localhost:8765)
+  build_dataset.py      labels -> train/val split by event
+  train.py              train, evaluate per track, export NCNN + threshold to server/models/
   seed_s3.py            upload the bootstrap data to S3 in the Pi's layout
   config.yaml
 docs/                   README images (make_images.py regenerates them)
@@ -87,74 +99,36 @@ docs/                   README images (make_images.py regenerates them)
 
 ## Deploying the server to the Pi
 
-One script does the install on the Pi: [`server/setup.sh`](server/setup.sh) (or `./setup-server.sh` from
-the repo root). It installs the apt packages, (re)builds the Python environment when `requirements.txt`
-changed, exports the detector models if they are missing, installs the systemd unit and restarts the
-service. It is safe to run again any time. It never overwrites `.env` or the spool.
+Everything happens on the Pi: clone the repo and run [`setup-server.sh`](setup-server.sh). It installs
+only what the server runs into a clean `~/scanwatch` (`camserver/`, `setup.sh`, `requirements.txt`, the
+systemd unit, `.env`) and deletes the clone: no docs, datasets, training code or git history on the Pi.
+It then runs [`setup.sh`](server/setup.sh), which installs the apt packages, (re)builds the Python
+environment when `requirements.txt` changed, exports the detector models if they are missing, installs
+the systemd unit and restarts the service. Both are safe to run again any time; they never overwrite
+`.env`, `.venv`, `models/` or the spool.
 
-Two ways to get the code there; pick one per Pi, don't mix them on the same directory:
-
-- **On the Pi, from git**: clone and run the setup script. Updating is the same clone + script again. Settings are edited on the Pi.
-- **From the Mac, over SSH**: [`server/deploy.sh`](server/deploy.sh) rsyncs your working copy (including
-  uncommitted changes and local models) and runs `setup.sh` on the Pi. Settings are edited on the Mac and pushed with `--env`.
-
-### On the Pi, from git
+#### 1. Prepare the Pi
 
 Raspberry Pi 5, Raspberry Pi OS Bookworm (64-bit), the Insta360 Link on USB, `git` installed and
-access to the repo (e.g. a deploy key).
-
-```bash
-git clone --depth 1 git@github.com:ReinMengelberg/scanwatch.git /tmp/scanwatch && /tmp/scanwatch/setup-server.sh
-nano ~/scanwatch/.env        # first run creates it and stops: fill in the S3 keys (see the settings table below)
-~/scanwatch/setup.sh --logs  # ~10 min the first time (torch + model export), seconds after that
-```
-
-`setup-server.sh` installs only what the server runs into a clean `~/scanwatch` (`camserver/`, `setup.sh`,
-`requirements.txt`, the systemd unit, `.env`) and deletes the clone: no docs, datasets, training code or
-git history on the Pi. A new version is the same clone + setup command again; `.env`, `.venv`, `models/`
-and `spool/` carry over. The web UI: see step 4 below
-(`ssh -N -L 8080:127.0.0.1:8080 pi@<pi-host>` from the Mac).
-
-The rest of this section describes the Mac route; the settings table, checks and troubleshooting apply to both.
-
-### From the Mac, over SSH
-
-#### 1. One-time setup on the Pi
-
-Raspberry Pi 5, Raspberry Pi OS Bookworm (64-bit), the Insta360 Link on USB, reachable over SSH from the Mac.
-
-From the Mac, make sure SSH works without a password (the script runs several ssh commands):
-
-```bash
-ssh-copy-id pi@<pi-host>
-```
-
-`<pi-host>` is whatever `ssh` accepts: an IP, a DNS name, or a `Host` alias. An alias in `~/.ssh/config`
-keeps the commands short (and handles a non-standard port or a jump host):
-
-```
-Host scanwatch
-  HostName <pi-ip-or-name>
-  User pi
-  # Port 2222
-  # ProxyJump user@bastion
-```
-
-The script uses `sudo` for apt and the systemd unit. That works out of the box on Raspberry Pi OS; if your
-user needs a password for sudo, `deploy.sh` stops and tells you to run `./setup.sh` on the Pi by hand
-(it asks for the password there).
+access to the repo over HTTPS (if it is private, a GitHub token as the password).
 
 **Replacing the old server?** Only one process can own the camera, so stop it once:
 `sudo systemctl disable --now <old-service>` (or kill the `server.py` process).
 
-#### 2. Configure on the Mac
-
-All settings live in `server/.env` (template: [`.env.example`](server/.env.example)). Edit them on the
-Mac and push them with `--env`, so there is one source of truth.
+#### 2. Install
 
 ```bash
-cd server
-cp .env.example .env         # once
+rm -rf /tmp/scanwatch && git clone --depth 1 https://github.com/ReinMengelberg/scanwatch.git /tmp/scanwatch && /tmp/scanwatch/setup-server.sh
+```
+
+The first run creates `~/scanwatch/.env` from the template and stops.
+
+#### 3. Configure
+
+All settings live in `~/scanwatch/.env` on the Pi (template: [`.env.example`](server/.env.example)):
+
+```bash
+nano ~/scanwatch/.env
 ```
 
 | Setting | Set to |
@@ -164,54 +138,29 @@ cp .env.example .env         # once
 | `UPLOAD` | `0` for the first run, `1` once tracks look right |
 | `DISCORD_WEBHOOK_URL` | optional: channel settings → Integrations → Webhooks |
 | `ROI` | road polygon; the default fits the current camera framing |
-| `CLS_MODEL` | empty until a scan-car model is trained (the Pi then only collects) |
+| `CLS_MODEL` | `models/scancar_cls_ncnn_model` once `train.py` exported one; empty = the Pi only collects |
 
-`.env` holds secrets (S3 keys, webhook URL): it is git-ignored and pushed with mode 600.
+`.env` holds secrets (S3 keys, webhook URL): it only exists on the Pi, with mode 600.
 
-The detector models in `server/models/` are git-ignored too. `setup.sh` exports them on the Pi when they
-are missing, but `deploy.sh` ships whatever is in your local `server/models/` (and `--delete` removes the
-rest), so on a fresh Mac clone export them once:
+Then start the service:
 
 ```bash
-uv venv -p 3.11 .venv && uv pip install -p .venv/bin/python -r requirements.txt pnnx
-mkdir -p models && cd models
-../.venv/bin/yolo export model=yolo11n.pt format=ncnn imgsz=416 && mv yolo11n_ncnn_model yolo11n_416_ncnn_model
-cd ..
+~/scanwatch/setup.sh --logs  # ~10 min the first time (torch + model export), seconds after that
 ```
-
-#### 3. First deploy
-
-```bash
-./deploy.sh pi@<pi-host> --env --logs
-```
-
-| Flag | |
-|---|---|
-| `--env` | also push your local `server/.env` (overwrites the Pi's) |
-| `--logs` | follow the service log afterwards (Ctrl-C to stop) |
-| `--ui` | open an SSH tunnel to the web UI afterwards (Ctrl-C to close) |
-| `--ui-only` | only open the tunnel, no deploy |
-| `UI_PORT=…` | local port for the tunnel (default `8080`) |
-| `PI=pi@<ip>` | set once (`export PI=…`) and just run `./deploy.sh` |
-| `PI_DIR=…` | install path on the Pi, relative to home (default `scanwatch`) |
-| `PI_SERVICE=…` | systemd unit name (default `camserver`) |
-
-The first deploy creates the virtualenv and installs ultralytics/torch: about 10 minutes. After that a
-deploy takes seconds.
 
 #### 4. Check that it works
 
-With `UPLOAD=0`, nothing leaves the Pi yet. Open the web UI from the Mac through an SSH tunnel:
+With `UPLOAD=0`, nothing leaves the Pi yet. Open the web UI from your computer through an SSH tunnel:
 
 ```bash
-./deploy.sh --ui-only        # same as: ssh -N -L 8080:127.0.0.1:8080 pi@<pi-host>
+ssh -N -L 8080:127.0.0.1:8080 pi@<pi-host>
 ```
 
 - `http://localhost:8080`: live view with a status line (motion, live/stored/ignored tracks, upload queue).
 - `http://localhost:8080/debug.jpg`: the ROI in yellow and green boxes on cars being tracked.
   Refresh while a car passes.
 
-In the log (`--logs`, or `journalctl -u camserver -f` on the Pi) a passing car looks like:
+In the log (`journalctl -u camserver -f` on the Pi) a passing car looks like:
 
 ```
 car/093512-204: 18 dets, travel 64%
@@ -220,43 +169,41 @@ car/093512-204: 18 dets, travel 64%
 Pedestrians and the parked cars should produce **no** line. Stored tracks are in
 `~/scanwatch/spool/car/<date>/` on the Pi; look at an `annotated.jpg` to check the box and the path.
 
-Discord: `ssh pi@<pi-host> 'cd scanwatch && .venv/bin/python -m camserver.notify'` posts a test message.
+Discord: `cd ~/scanwatch && .venv/bin/python -m camserver.notify` on the Pi posts a test message.
 
 #### 5. Go live
 
-Set `UPLOAD=1` in `server/.env` and deploy again:
-
-```bash
-./deploy.sh --env
-```
-
-The spooled tracks upload within seconds; check them in the bucket under `car/<date>/`.
+Set `UPLOAD=1` in `~/scanwatch/.env` and run `~/scanwatch/setup.sh` again. The spooled tracks upload
+within seconds; check them in the bucket under `car/<date>/`.
 
 ### Updating
 
+All on the Pi:
+
 | Changed | Run |
 |---|---|
-| code or models | `./deploy.sh` |
-| settings in `.env` | `./deploy.sh --env` |
-| `requirements.txt` | `./deploy.sh` (pip runs automatically) |
-| anything, Pi installed from git | on the Pi: the clone + `setup-server.sh` command again |
-| nothing, just restart | `ssh pi@<pi-host> sudo systemctl restart camserver` |
-| look at the web UI | `./deploy.sh --ui-only` |
+| code or `requirements.txt` | the clone + `setup-server.sh` command from step 2 again |
+| settings | edit `~/scanwatch/.env`, then `~/scanwatch/setup.sh` |
+| nothing, just restart | `sudo systemctl restart camserver` |
 
-Rolling back: check out the previous commit on the Mac and run `./deploy.sh` again.
+A trained classifier is git-ignored, so it doesn't come with the clone. Copy it over from the Mac once
+(`models/` is kept across installs), set `CLS_MODEL` and run `setup.sh`:
+
+```bash
+scp -r server/models/scancar_cls_ncnn_model pi@<pi-host>:scanwatch/models/
+```
 
 ### Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|
 | `Address already in use` / camera busy | the old server is still running (step 1) |
-| `Cannot assign requested address` / `BIND=… is not an address on this Pi` | the Pi's `.env` still has the old WireGuard IP: set `BIND=127.0.0.1` and `./deploy.sh --env` |
-| `bind [127.0.0.1]:8080: Address already in use` (tunnel) | something on the Mac uses 8080: `UI_PORT=8081 ./deploy.sh --ui-only` |
+| `Cannot assign requested address` / `BIND=… is not an address on this Pi` | the Pi's `.env` still has the old WireGuard IP: set `BIND=127.0.0.1` and run `setup.sh` |
+| `bind [127.0.0.1]:8080: Address already in use` (tunnel) | something on your computer uses 8080: tunnel `-L 8081:127.0.0.1:8080` and open `http://localhost:8081` |
 | no frames, `/snap` returns 503 | camera unplugged or another process owns `/dev/video0` |
 | cars pass but no track is stored | car outside the ROI or not moving enough: check `/debug.jpg`, tune `ROI` / `MIN_TRAVEL` |
 | parked car stored repeatedly | raise `MIN_TRAVEL` |
 | upload queue grows | S3 credentials or network; `/status` shows `last_error` |
-| `sudo needs a password` | run the printed command on the Pi, or allow passwordless sudo for your user |
 
 ### On the Pi
 
@@ -299,11 +246,25 @@ The folder is the Pi's opinion, not a label. Labels are made on the Mac.
 cd train
 uv venv -p 3.12 .venv && uv pip install -p .venv/bin/python -r requirements.txt
 .venv/bin/python bootstrap.py      # frames in ../datasets/{scancar,othercar} -> data/raw + auto labels
+.venv/bin/python pull.py           # S3 -> ../datasets/s3, new tracks -> data/raw (car/ = auto "other")
 .venv/bin/python label.py          # review: s scancar · o other · h hard negative · k skip
+.venv/bin/python build_dataset.py  # -> datasets/scancar_cls/{train,val}, split by event
+.venv/bin/python train.py          # train on MPS, per-track eval, export -> ../server/models/scancar_cls_ncnn_model
 ```
 
-Still to come: `pull.py` (S3 → local), `synth.py` (paste the scan car onto empty streets),
-`build_dataset.py` (split by event, never by frame), `train.py`, `eval.py` and `export_deploy.py`.
+- **Labels.** `pull.py` labels tracks from `car/` as "other" until a model has scored them: scan cars are
+  rare. Check them in `label.py` anyway, and mark red-on-white look-alikes as hard negatives (`h`).
+- **Split.** One pass of a car is one event and never sits in both train and val. Positives are repeated
+  in train until the classes are balanced.
+- **Evaluation** is per track, as the Pi decides: mean of the top-3 crop scores. The alert threshold
+  is set just above the best-scoring negative val track (never below 0.5) and written to
+  `threshold.json` inside the exported model; `CLS_THRESHOLD` in `.env` overrides it.
+- **Augmentation** (`config.yaml` → `train`): no RandAugment, little hue/saturation jitter and a
+  random crop that keeps ≥ 85% of the image, so the red stripes and the roof pod survive.
+- `python train.py --run <run>` evaluates and exports an existing run without training again.
+
+Then set `CLS_MODEL=models/scancar_cls_ncnn_model` in `server/.env` and `./deploy.sh --env`.
+Still to come: `synth.py` (paste the scan car onto empty streets).
 
 ## Privacy (AVG/GDPR)
 

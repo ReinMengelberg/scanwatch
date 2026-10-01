@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install / update camserver on the Pi itself, from its install dir (~/scanwatch, created by
-# ../setup-server.sh, or synced by deploy.sh):
+# ../setup-server.sh, which also runs this script):
 #
 #   ./setup.sh            install everything that is missing, then (re)start the service
 #   ./setup.sh --logs     follow the log afterwards
@@ -9,7 +9,6 @@
 # detector models are only exported when missing, the systemd unit only rewritten when it changed.
 # Never touches .env (except creating it from .env.example the first time; the template is then
 # removed) or the spool.
-# deploy.sh runs this same script over ssh after syncing from the Mac.
 # Env: SERVICE (systemd unit name, default camserver).
 set -euo pipefail
 
@@ -23,7 +22,7 @@ done
 SERVICE="${SERVICE:-camserver}"
 cd "$(dirname "$0")"
 
-# sudo: fine to ask for a password when run by hand, but not under deploy.sh (no terminal)
+# sudo: fine to ask for a password when run by hand, but not without a terminal (e.g. over ssh)
 if ! sudo -n true 2>/dev/null && [[ ! -t 0 ]]; then
   SUDO_HINT=1
 fi
@@ -76,7 +75,7 @@ if ! cmp -s requirements.txt .venv/.deployed-requirements.txt; then
   cp requirements.txt .venv/.deployed-requirements.txt
 fi
 
-# Detector models are git-ignored: export them here when they weren't shipped by deploy.sh
+# Detector models are git-ignored: export them here when they are missing
 for size in 416; do
   if [[ ! -d models/yolo11n_${size}_ncnn_model ]]; then
     echo "==> exporting models/yolo11n_${size}_ncnn_model (once, a few minutes)"

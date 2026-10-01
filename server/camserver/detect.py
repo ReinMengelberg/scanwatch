@@ -46,14 +46,11 @@ class Classifier:
 
         self.model = YOLO(model, task="classify")
         self.idx = next(i for i, n in self.model.names.items() if n == "scancar")
-        self.version = Path(model).resolve().parent.name
-        tj = Path(model).parent / "threshold.json"
-        if C.CLS_THRESHOLD:
-            self.threshold = float(C.CLS_THRESHOLD)
-        elif tj.exists():
-            self.threshold = float(json.loads(tj.read_text())["threshold"])
-        else:
-            self.threshold = 0.5
+        p = Path(model).resolve()
+        tj = (p if p.is_dir() else p.parent) / "threshold.json"  # inside an NCNN model dir, else next to the file
+        info = json.loads(tj.read_text()) if tj.exists() else {}
+        self.version = info.get("run", p.name)
+        self.threshold = float(C.CLS_THRESHOLD or info.get("threshold", 0.5))
 
     def __call__(self, crops_bgr: list) -> list[float]:
         if not crops_bgr:

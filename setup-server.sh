@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # On the Pi: install camserver from a fresh clone into a clean ~/scanwatch, then delete the clone.
 #
-#   git clone --depth 1 git@github.com:ReinMengelberg/scanwatch.git /tmp/scanwatch && /tmp/scanwatch/setup-server.sh
+#   rm -rf /tmp/scanwatch && git clone --depth 1 https://github.com/ReinMengelberg/scanwatch.git /tmp/scanwatch && /tmp/scanwatch/setup-server.sh
 #
 # A new version = the same command again. ~/scanwatch only holds what the server runs:
 # camserver/, setup.sh, requirements.txt, camserver.service, .env, plus the state that is kept
