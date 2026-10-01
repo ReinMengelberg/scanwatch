@@ -70,12 +70,15 @@ class Tracker:
     def update(self, t: float, frame, vehicles, persons) -> list[Track]:
         """Feed one detected frame. Returns tracks that just ended (moved or not; see valid())."""
         unmatched = list(range(len(vehicles)))
+        inside = [self._inside(v[0]) for v in vehicles]
         pairs = sorted(((iou(tr.path[-1][1], vehicles[j][0]), i, j)
                         for i, tr in enumerate(self.tracks) for j in unmatched), reverse=True)
         used_t, used_d = set(), set()
         for score, i, j in pairs:
             if i in used_t or j in used_d:
                 continue
+            if self.tracks[i].in_roi and not inside[j]:
+                continue  # a car on the road never hops onto one parked beside it
             last = self.tracks[i].path[-1][1]
             (cx, cy), (dx, dy) = _center(last), _center(vehicles[j][0])
             near = abs(cx - dx) < 0.6 * (last[2] - last[0]) and abs(cy - dy) < 0.6 * (last[3] - last[1])
