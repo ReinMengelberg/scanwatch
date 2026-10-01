@@ -1,6 +1,6 @@
 # /etc/systemd/system/camserver.service
 #   sudo cp camserver.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now camserver
-# Settings come from server/.env (read by camserver/config.py).
+# Settings come from .env (read by camserver/config.py).
 [Unit]
 Description=Street cam: capture, scan-car detection, S3 upload
 After=network-online.target
@@ -8,8 +8,8 @@ Wants=network-online.target
 
 [Service]
 User=pi
-WorkingDirectory=/home/pi/scanwatch/server
-ExecStart=/home/pi/scanwatch/server/.venv/bin/python -m camserver
+WorkingDirectory=/home/pi/scanwatch
+ExecStart=/home/pi/scanwatch/.venv/bin/python -m camserver
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1

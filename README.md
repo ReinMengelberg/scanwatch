@@ -94,7 +94,7 @@ service. It is safe to run again any time. It never overwrites `.env` or the spo
 
 Two ways to get the code there; pick one per Pi, don't mix them on the same directory:
 
-- **On the Pi, from git**: clone and run the setup script. Updating is `git pull` + the script. Settings are edited on the Pi.
+- **On the Pi, from git**: clone and run the setup script. Updating is the same clone + script again. Settings are edited on the Pi.
 - **From the Mac, over SSH**: [`server/deploy.sh`](server/deploy.sh) rsyncs your working copy (including
   uncommitted changes and local models) and runs `setup.sh` on the Pi. Settings are edited on the Mac and pushed with `--env`.
 
@@ -104,23 +104,15 @@ Raspberry Pi 5, Raspberry Pi OS Bookworm (64-bit), the Insta360 Link on USB, `gi
 access to the repo (e.g. a deploy key).
 
 ```bash
-git clone git@github.com:ReinMengelberg/scanwatch.git ~/scanwatch
-cd ~/scanwatch
-./setup-server.sh            # first run creates server/.env and stops
-nano server/.env             # fill in S3_* etc. (see the settings table below), UPLOAD=0 for a first run
-./setup-server.sh --logs     # ~10 min the first time (torch + model export), seconds after that
+git clone --depth 1 git@github.com:ReinMengelberg/scanwatch.git /tmp/scanwatch && /tmp/scanwatch/setup-server.sh
+nano ~/scanwatch/.env        # first run creates it and stops: fill in the S3 keys (see the settings table below)
+~/scanwatch/setup.sh --logs  # ~10 min the first time (torch + model export), seconds after that
 ```
 
-The service runs from wherever you cloned it. `server/` is self-contained, so you can also check out
-just that directory:
-
-```bash
-git clone --filter=blob:none --sparse git@github.com:ReinMengelberg/scanwatch.git ~/scanwatch
-cd ~/scanwatch && git sparse-checkout set server
-server/setup.sh --logs
-```
-
-Updating: `cd ~/scanwatch && git pull && ./setup-server.sh`. The web UI: see step 4 below
+`setup-server.sh` installs only what the server runs into a clean `~/scanwatch` (`camserver/`, `setup.sh`,
+`requirements.txt`, the systemd unit, `.env`) and deletes the clone: no docs, datasets, training code or
+git history on the Pi. A new version is the same clone + setup command again; `.env`, `.venv`, `models/`
+and `spool/` carry over. The web UI: see step 4 below
 (`ssh -N -L 8080:127.0.0.1:8080 pi@<pi-host>` from the Mac).
 
 The rest of this section describes the Mac route; the settings table, checks and troubleshooting apply to both.
@@ -202,7 +194,7 @@ cd ..
 | `--ui-only` | only open the tunnel, no deploy |
 | `UI_PORT=…` | local port for the tunnel (default `8080`) |
 | `PI=pi@<ip>` | set once (`export PI=…`) and just run `./deploy.sh` |
-| `PI_DIR=…` | install path on the Pi, relative to home (default `scanwatch/server`) |
+| `PI_DIR=…` | install path on the Pi, relative to home (default `scanwatch`) |
 | `PI_SERVICE=…` | systemd unit name (default `camserver`) |
 
 The first deploy creates the virtualenv and installs ultralytics/torch: about 10 minutes. After that a
@@ -229,7 +221,7 @@ car/093512-204: 18 dets, travel 64%
 Pedestrians and the parked cars should produce **no** line. Stored tracks are in
 `~/scanwatch/spool/car/<date>/` on the Pi; look at an `annotated.jpg` to check the box and the path.
 
-Discord: `ssh pi@<pi-host> 'cd scanwatch/server && .venv/bin/python -m camserver.notify'` posts a test message.
+Discord: `ssh pi@<pi-host> 'cd scanwatch && .venv/bin/python -m camserver.notify'` posts a test message.
 
 #### 5. Go live
 
@@ -248,7 +240,7 @@ The spooled tracks upload within seconds; check them in the bucket under `car/<d
 | code or models | `./deploy.sh` |
 | settings in `.env` | `./deploy.sh --env` |
 | `requirements.txt` | `./deploy.sh` (pip runs automatically) |
-| anything, Pi cloned from git | on the Pi: `git pull && ./setup-server.sh` |
+| anything, Pi installed from git | on the Pi: the clone + `setup-server.sh` command again |
 | nothing, just restart | `ssh pi@<pi-host> sudo systemctl restart camserver` |
 | look at the web UI | `./deploy.sh --ui-only` |
 

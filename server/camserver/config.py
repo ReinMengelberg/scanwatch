@@ -93,7 +93,7 @@ ANNOTATE = env("ANNOTATE", "1") == "1"  # also upload annotated.jpg (frame + box
 
 SPOOL_DIR = _path(env("SPOOL_DIR", "~/scanwatch/spool"))
 MIN_FREE_GB = float(env("MIN_FREE_GB", "2"))  # below this, drop the oldest spooled days
-S3_ENDPOINT = env("S3_ENDPOINT", "")
+S3_ENDPOINT = env("S3_ENDPOINT", "https://fsn1.your-objectstorage.com")  # Hetzner Object Storage
 S3_BUCKET = env("S3_BUCKET", "")
 S3_REGION = env("S3_REGION", "us-east-1")
 S3_ACCESS_KEY_ID = env("S3_ACCESS_KEY_ID", "")

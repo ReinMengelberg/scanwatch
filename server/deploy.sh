@@ -12,7 +12,7 @@
 # Syncs code + models, then runs setup.sh on the Pi (venv, pip when requirements.txt changed,
 # systemd unit, restart). Never touches the Pi's .env, .venv or spool.
 # Use either this or a git clone on the Pi (./setup-server.sh), not both on the same directory.
-# Env: PI_DIR (default scanwatch/server, relative to the Pi user's home), PI_SERVICE (camserver),
+# Env: PI_DIR (default scanwatch, relative to the Pi user's home), PI_SERVICE (camserver),
 # UI_PORT (local tunnel port, default 8080; the Pi side uses PORT from the Pi's .env).
 set -euo pipefail
 
@@ -28,7 +28,7 @@ for a in "$@"; do
   esac
 done
 [[ -n "${PI:-}" ]] || { echo "usage: ./deploy.sh user@host [--env] [--logs] [--ui|--ui-only]   (or set PI=user@host)"; exit 1; }
-DIR="${PI_DIR:-scanwatch/server}"
+DIR="${PI_DIR:-scanwatch}"
 SERVICE="${PI_SERVICE:-camserver}"
 cd "$(dirname "$0")"
 
@@ -47,6 +47,7 @@ echo "==> sync to $PI:~/$DIR"
 ssh "$PI" "mkdir -p ~/$DIR"
 rsync -azL --delete \
   --exclude .venv --exclude .env --exclude spool --exclude __pycache__ --exclude .DS_Store \
+  --exclude deploy.sh --exclude server.py --exclude camserver/replay.py \
   ./ "$PI:$DIR/"
 if [[ $ENV == 1 ]]; then
   echo "==> push local .env (overwrites the Pi's)"

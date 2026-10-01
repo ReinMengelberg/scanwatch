@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Install / update camserver on the Pi itself. Run it on the Pi, from a clone of the repo
-# (or of just server/):
+# Install / update camserver on the Pi itself, from its install dir (~/scanwatch, created by
+# ../setup-server.sh, or synced by deploy.sh):
 #
 #   ./setup.sh            install everything that is missing, then (re)start the service
 #   ./setup.sh --logs     follow the log afterwards
 #
 # Idempotent: apt only runs for missing packages, pip only when requirements.txt changed, the
 # detector models are only exported when missing, the systemd unit only rewritten when it changed.
-# Never touches .env (except creating it from .env.example the first time) or the spool.
+# Never touches .env (except creating it from .env.example the first time; the template is then
+# removed) or the spool.
 # deploy.sh runs this same script over ssh after syncing from the Mac.
 # Env: SERVICE (systemd unit name, default camserver).
 set -euo pipefail
@@ -45,9 +46,19 @@ if (( ${#missing[@]} )); then
 fi
 
 if [[ ! -f .env ]]; then
-  cp .env.example .env && chmod 600 .env
-  echo "!! created $PWD/.env from .env.example: fill in S3_* (and the rest), then run setup again"
+  [[ -f .env.example ]] || { echo "!! no $PWD/.env"; exit 1; }
+  mv .env.example .env && chmod 600 .env
+  echo "!! created $PWD/.env: fill in S3_* (and the rest), then run $PWD/setup.sh"
   exit 1
+fi
+rm -f .env.example
+if [[ "$(sed -nE 's/^UPLOAD=([^ #]*).*/\1/p' .env)" != 0 ]]; then
+  for k in S3_ENDPOINT S3_BUCKET S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY; do
+    if [[ -z "$(sed -nE "s/^$k=([^ #]*).*/\1/p" .env)" ]]; then
+      echo "!! $k is empty in $PWD/.env: fill in S3_* (or set UPLOAD=0), then run setup again"
+      exit 1
+    fi
+  done
 fi
 bind=$(sed -nE 's/^BIND=([^ #]*).*/\1/p' .env)
 if [[ -n "$bind" && "$bind" != 127.0.0.1 && "$bind" != 0.0.0.0 ]] && ! ip -4 -o addr | grep -q "inet $bind/"; then
@@ -61,7 +72,7 @@ if ! .venv/bin/python -c "" 2>/dev/null; then  # missing, or a copied macOS venv
 fi
 if ! cmp -s requirements.txt .venv/.deployed-requirements.txt; then
   echo "==> requirements changed: pip install (first time ~10 min)"
-  .venv/bin/pip install -q -r requirements.txt
+  .venv/bin/python -m pip install -q -r requirements.txt
   cp requirements.txt .venv/.deployed-requirements.txt
 fi
 
@@ -70,14 +81,15 @@ for size in 416 640; do
   if [[ ! -d models/yolo11n_${size}_ncnn_model ]]; then
     echo "==> exporting models/yolo11n_${size}_ncnn_model (once, a few minutes)"
     mkdir -p models
-    .venv/bin/python -c "import pnnx" 2>/dev/null || .venv/bin/pip install -q pnnx
-    (cd models && ../.venv/bin/yolo export model=yolo11n.pt format=ncnn imgsz=$size \
+    .venv/bin/python -c "import pnnx" 2>/dev/null || .venv/bin/python -m pip install -q pnnx
+    (cd models && ../.venv/bin/python -c "from ultralytics.cfg import entrypoint; entrypoint()" \
+      export model=yolo11n.pt format=ncnn imgsz=$size \
       && mv yolo11n_ncnn_model yolo11n_${size}_ncnn_model)
   fi
 done
 
 # unit file with this user and path
-unit=$(sed -e "s#^User=.*#User=$(whoami)#" -e "s#/home/pi/scanwatch/server#$PWD#g" camserver.service)
+unit=$(sed -e "s#^User=.*#User=$(whoami)#" -e "s#/home/pi/scanwatch#$PWD#g" camserver.service)
 if [[ "$unit" != "$(cat /etc/systemd/system/$SERVICE.service 2>/dev/null)" ]]; then
   need_sudo
   echo "$unit" | sudo tee /etc/systemd/system/$SERVICE.service >/dev/null
