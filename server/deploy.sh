@@ -9,8 +9,9 @@
 #
 # <host> is anything ssh accepts: an IP, a DNS name, or a Host alias from ~/.ssh/config.
 #
-# Syncs code + models (crop.py symlink is copied as a real file). Never touches the Pi's .env,
-# .venv or spool. pip only runs when requirements.txt changed. Installs/updates the systemd unit.
+# Syncs code + models, then runs setup.sh on the Pi (venv, pip when requirements.txt changed,
+# systemd unit, restart). Never touches the Pi's .env, .venv or spool.
+# Use either this or a git clone on the Pi (./setup-server.sh), not both on the same directory.
 # Env: PI_DIR (default scanwatch/server, relative to the Pi user's home), PI_SERVICE (camserver),
 # UI_PORT (local tunnel port, default 8080; the Pi side uses PORT from the Pi's .env).
 set -euo pipefail
@@ -52,48 +53,8 @@ if [[ $ENV == 1 ]]; then
   scp -q .env "$PI:$DIR/.env" && ssh "$PI" chmod 600 "$DIR/.env"
 fi
 
-echo "==> install + restart $SERVICE"
-ssh "$PI" DIR="$DIR" SERVICE="$SERVICE" bash -s <<'EOF'
-set -euo pipefail
-cd ~/"$DIR"
-if [[ ! -f .env ]]; then
-  cp .env.example .env
-  echo "!! created .env from .env.example: set BIND and S3_* in ~/$DIR/.env, then deploy again"
-  exit 1
-fi
-bind=$(sed -nE 's/^BIND=([^ #]*).*/\1/p' .env)
-if [[ -n "$bind" && "$bind" != 127.0.0.1 && "$bind" != 0.0.0.0 ]] && ! ip -4 -o addr | grep -q "inet $bind/"; then
-  echo "!! BIND=$bind in ~/$DIR/.env is not an address on this Pi (old WireGuard IP?)."
-  echo "!! Set BIND=127.0.0.1 and use ./deploy.sh --ui, or push your local .env with --env."
-  exit 1
-fi
-if ! .venv/bin/python -c "" 2>/dev/null; then  # missing, or a copied macOS venv
-  echo "creating .venv"
-  rm -rf .venv && python3 -m venv .venv
-fi
-if ! cmp -s requirements.txt .venv/.deployed-requirements.txt; then
-  echo "requirements changed: pip install (first time ~10 min)"
-  .venv/bin/pip install -q -r requirements.txt
-  cp requirements.txt .venv/.deployed-requirements.txt
-fi
-
-# unit file with this user and path
-unit=$(sed -e "s#^User=.*#User=$(whoami)#" -e "s#/home/pi/scanwatch/server#$PWD#g" camserver.service)
-if ! sudo -n true 2>/dev/null; then
-  echo "!! sudo needs a password here; run on the Pi: sudo systemctl restart $SERVICE"
-  exit 1
-fi
-if [[ "$unit" != "$(cat /etc/systemd/system/$SERVICE.service 2>/dev/null)" ]]; then
-  echo "$unit" | sudo tee /etc/systemd/system/$SERVICE.service >/dev/null
-  sudo systemctl daemon-reload
-  sudo systemctl enable -q "$SERVICE"
-  echo "installed /etc/systemd/system/$SERVICE.service"
-fi
-sudo systemctl restart "$SERVICE"
-sleep 4
-if systemctl is-active -q "$SERVICE"; then echo "$SERVICE is running"; else echo "!! $SERVICE failed:"; fi
-journalctl -u "$SERVICE" -n 15 --no-pager -o cat
-EOF
+echo "==> setup.sh on the Pi"
+ssh "$PI" "cd ~/$DIR && SERVICE=$SERVICE ./setup.sh"
 
 if [[ $LOGS == 1 && $UI == 1 ]]; then
   echo "(--logs and --ui together: showing logs; run ./deploy.sh --ui-only in another terminal for the UI)"
