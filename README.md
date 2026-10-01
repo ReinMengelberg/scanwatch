@@ -138,7 +138,8 @@ nano ~/scanwatch/.env
 | `UPLOAD` | `0` for the first run, `1` once tracks look right |
 | `DISCORD_WEBHOOK_URL` | optional: channel settings → Integrations → Webhooks |
 | `ROI` | road polygon; the default fits the current camera framing |
-| `CLS_MODEL` | `models/scancar_cls_ncnn_model` once `train.py` exported one; empty = the Pi only collects |
+| `CLS_MODEL` | `models/scancar_cls_ncnn_model` (shipped in git); empty = the Pi only collects, no alerts |
+| `CLS_THRESHOLD` | alert threshold; empty = `threshold.json` in the model dir |
 
 `.env` holds secrets (S3 keys, webhook URL): it only exists on the Pi, with mode 600.
 
@@ -186,12 +187,15 @@ All on the Pi:
 | settings | edit `~/scanwatch/.env`, then `~/scanwatch/setup.sh` |
 | nothing, just restart | `sudo systemctl restart camserver` |
 
-A trained classifier is git-ignored, so it doesn't come with the clone. Copy it over from the Mac once
-(`models/` is kept across installs), then set `CLS_MODEL=models/scancar_cls_ncnn_model` in
-`~/scanwatch/.env` and run `~/scanwatch/setup.sh`:
+The trained classifier (`server/models/scancar_cls_ncnn_model`) is the one model in git: every
+clone + `setup-server.sh` installs the committed version. The detectors stay git-ignored and are
+exported on the Pi. A `.env` from before the classifier existed still has `CLS_MODEL=` empty; fill it
+in once:
 
 ```bash
-scp -r server/models/scancar_cls_ncnn_model pi@<pi-host>:scanwatch/models/
+sed -i -e 's|^CLS_MODEL=$|CLS_MODEL=models/scancar_cls_ncnn_model|' \
+       -e 's|^CLS_THRESHOLD= |CLS_THRESHOLD=0.35 |' ~/scanwatch/.env
+sudo systemctl restart camserver
 ```
 
 ### Troubleshooting
@@ -264,7 +268,7 @@ uv venv -p 3.12 .venv && uv pip install -p .venv/bin/python -r requirements.txt
   random crop that keeps ≥ 85% of the image, so the red stripes and the roof pod survive.
 - `python train.py --run <run>` evaluates and exports an existing run without training again.
 
-Then copy the model to the Pi and set `CLS_MODEL` there (see [Updating](#updating)).
+Commit `server/models/scancar_cls_ncnn_model` and run the update on the Pi (see [Updating](#updating)).
 Still to come: `synth.py` (paste the scan car onto empty streets).
 
 ## Privacy (AVG/GDPR)

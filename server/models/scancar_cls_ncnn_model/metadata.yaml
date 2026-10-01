@@ -1,0 +1,21 @@
+description: Ultralytics YOLO11n-cls model trained on /Users/rein/Desktop/scanwatch/train/datasets/scancar_cls
+author: Ultralytics
+date: '2026-10-01T16:03:46.798296+02:00'
+version: 8.4.171
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 1
+task: classify
+head: Classify
+batch: 1
+imgsz:
+- 224
+- 224
+names:
+  0: other
+  1: scancar
+args:
+  batch: 1
+  quantize: null
+channels: 3
+end2end: false

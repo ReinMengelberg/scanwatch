@@ -42,6 +42,13 @@ main() {
     done
   done
 
+  # the trained classifier ships in git: always take the clone's version
+  if [[ -d "$src/server/models/scancar_cls_ncnn_model" ]]; then
+    mkdir -p "$stage/models"
+    rm -rf "$stage/models/scancar_cls_ncnn_model"
+    cp -a "$src/server/models/scancar_cls_ncnn_model" "$stage/models/"
+  fi
+
   cd /
   rm -rf "$dest"
   mv "$stage" "$dest"

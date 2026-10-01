@@ -4,6 +4,8 @@ __pycache__/
 .venv/
 *.pt
 *_ncnn_model/
+# the trained classifier ships with the code; detectors are exported on the Pi
+!server/models/scancar_cls_ncnn_model/
 
 # AVG: frames and crops can contain plates -> never in git
 datasets/
