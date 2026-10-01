@@ -1,4 +1,4 @@
-"""S3 -> local: mirror the bucket to ../datasets (same as ../fetch-dataset.sh), then index the Pi's tracks for labelling.
+"""S3 -> local: mirror the bucket to ../dataset (same as ../fetch-dataset.sh), then index the Pi's tracks for labelling.
 
 Per track: the crops go to data/raw/s3/<date>/<track>/ (label.py only serves crops under data/), the frame
 stays in the mirror. One pass = one track = one event, so a pass never ends up in both train and val.
@@ -17,7 +17,7 @@ import cv2
 
 from scancar.common import RAW, ROOT, Deduper, append_index, append_labels, read_index, s3_client
 
-MIRROR = ROOT.parent / "datasets"
+MIRROR = ROOT.parent / "dataset"
 
 
 def sync() -> int:

@@ -1,6 +1,6 @@
 """Run the pipeline offline on a folder of frames or a video. No camera, no upload.
 
-  python -m camserver.replay ../datasets/othercar --det ../train/yolo11n.pt --spool /tmp/spool
+  python -m camserver.replay ../dataset/othercar --det ../train/yolo11n.pt --spool /tmp/spool
   python -m camserver.replay street.mp4 --fps 10
 
 Frame times come from an index.csv next to the frames (camserver's old format), else --fps.

@@ -8,7 +8,7 @@ __pycache__/
 !server/models/scancar_cls_ncnn_model/
 
 # AVG: frames and crops can contain plates -> never in git
-datasets/
+dataset/
 train/data/
 train/datasets/
 train/runs/

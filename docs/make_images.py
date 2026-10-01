@@ -22,11 +22,11 @@ from scancar.crop import crop, pad_box  # noqa: E402
 OUT = ROOT / "docs" / "img"
 W, H = 960, 540
 RED, GREEN, GREY, YELLOW = (77, 72, 229), (108, 164, 48), (150, 150, 150), (0, 200, 255)
-SCAN = "../datasets/scancar/b1307830-e51f-4a03-ab60-5e0a1c43de20.jpg"
-FRONT = "../datasets/scancar/ad2eb96a-6542-4901-835d-9b2a05b865f0.jpg"
-REAR = "../datasets/scancar/c23daf5b-1a29-453d-bbd4-05a9c8b48587.jpg"
-OTHER = "../datasets/othercar/123732-162.jpg"  # tinted windows: no visible driver
-EMPTY = "../datasets/othercar/123744-820.jpg"  # emptiest frame: only the parked Tesla
+SCAN = "../dataset/scancar/b1307830-e51f-4a03-ab60-5e0a1c43de20.jpg"
+FRONT = "../dataset/scancar/ad2eb96a-6542-4901-835d-9b2a05b865f0.jpg"
+REAR = "../dataset/scancar/c23daf5b-1a29-453d-bbd4-05a9c8b48587.jpg"
+OTHER = "../dataset/othercar/123732-162.jpg"  # tinted windows: no visible driver
+EMPTY = "../dataset/othercar/123744-820.jpg"  # emptiest frame: only the parked Tesla
 FRAMES = [SCAN, FRONT, REAR, OTHER, EMPTY]
 ROI = [(0, 0.75), (0.45, 0.62), (1, 0.48), (1, 0.65), (0.45, 0.82), (0, 0.93)]
 

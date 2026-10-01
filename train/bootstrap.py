@@ -1,11 +1,11 @@
-"""Turn the pre-sorted full frames (../datasets/{scancar,othercar}) into labelled crops.
+"""Turn the pre-sorted full frames (../dataset/scancar) into labelled crops.
 
 Per frame: run the Pi's detector, crop every vehicle with crop.py. pHash near-duplicates are not\nstored again; their box is indexed with dup_of=<crop> so the frame view still shows it.
 Auto labels (source=auto, fix them in label.py):
   - boxes at the same spot in most frames (parked cars)  -> other
   - frames from an 'other' folder                         -> other
-  - frames from a 'scancar' folder: biggest moving box    -> scancar, the rest -> other,
-    except boxes whose crop shows the scan car's pod       -> skip (pod fragments)
+  - frames from a 'scancar' folder: biggest moving box    -> scancar, the rest -> skip
+    (negatives come from cars driving past, via pull.py; this also drops pod fragments)
 Re-runnable: frames already in data/index.csv are skipped.
 """
 import csv
@@ -15,7 +15,7 @@ from datetime import datetime
 import cv2
 
 from scancar.common import ROOT, RAW, Deduper, append_index, append_labels, cfg, detect, iou, read_index
-from scancar.crop import crop, pad_box
+from scancar.crop import crop
 
 
 def load_frames(c):
@@ -67,12 +67,6 @@ def main():
         hits = sum(any(iou(b, o) >= c["bootstrap"]["static_iou"] for o, _ in dets[q]) for q in dets if q != p)
         return hits >= c["bootstrap"]["static_frac"] * (n - 1)
 
-    def shows_pod(b, scan):
-        """Does b's crop contain the top 30% of the scan car (where the pod is)?"""
-        x1, y1, x2, y2 = pad_box(b, W, H)
-        sx1, sy1, sx2, sy2 = scan
-        return min(x2, sx2) > max(x1, sx1) and min(y2, sy1 + 0.3 * (sy2 - sy1)) > max(y1, sy1)
-
     dd = Deduper()
     index_rows, label_rows, dups = [], [], 0
     for p, label, ts in frames:
@@ -83,8 +77,8 @@ def main():
         for i, (b, conf) in enumerate(dets[p]):
             static = b not in moving
             lab = "scancar" if label == "scancar" and moving and b == moving[0] else "other"
-            if label == "scancar" and lab == "other" and moving and shows_pod(b, moving[0]):
-                lab = "skip"  # fragment of the scan car (e.g. the pod alone) or its crop shows the pod
+            if label == "scancar" and lab == "other":
+                lab = "skip"  # negatives come from cars driving past (pull.py), not from the scan car's frames
             # track ids (no tracker here): a pass = one track; parked cars one per event;
             # other movers one track per crop (conservative: more chances for a false alarm)
             if static:
