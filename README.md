@@ -41,15 +41,22 @@ detector; what gets stored is decided by three filters:
   through its bend in the middle of the frame, and a car counts as on the road when the bottom centre of
   its box (where the wheels touch) is inside it. Once a track is on the road it never jumps to a
   detection outside it, so a passing car's track never hops onto the Tesla parked beside the road.
-- **Travel**: a track must move ≥ 15% of the frame width, so the parked Tesla in front of the window
+- **Travel**: a track must move ≥ 10% of the frame width, so the parked Tesla in front of the window
   never becomes an upload, no matter how often someone walks by.
 - **No hopping**: once a track is on the road it never continues onto a box whose wheels are off the
-  road, so a car leaving the frame does not hand its track over to a car parked next to it.
+  road, and a parked car's track (still for `PARKED_AFTER` s) only continues on a box that clearly
+  overlaps it, so a car driving past is never swallowed by a parked one.
+- **Stop = done**: a pass that comes to a stop (parking, waiting, stuck behind a parked car) is finished
+  after `PARKED_AFTER` s, so it is stored and alerted on time; the standing car gets a fresh track.
+- **Dropped tracks are logged**: every ignored track goes to `ignored/<date>/` on S3 as a small JSON with
+  the reason (one detection, never in the ROI, too little travel) and its path, so missed cars can be traced.
 
 ![The ROI and where cars actually drove](docs/img/roi.jpg)
 
 <sub>Yellow: the ROI. Dots: where the wheels of passing cars touched the road (red: scan car, green: other traffic).
-The ROI is fitted to those points (the bottom-centre of each box), not to the kerbs.</sub>
+The ROI is fitted to those points (the bottom-centre of each box) of moving cars, with a margin: it
+includes the plaza lane on the far side and the kerb-side lane, and leaves out the cars parked in front
+of the window.</sub>
 
 ```mermaid
 flowchart LR
@@ -206,7 +213,7 @@ sudo systemctl restart camserver
 | `Cannot assign requested address` / `BIND=… is not an address on this Pi` | the Pi's `.env` still has the old WireGuard IP: set `BIND=127.0.0.1` and run `setup.sh` |
 | `bind [127.0.0.1]:8080: Address already in use` (tunnel) | something on your computer uses 8080: tunnel `-L 8081:127.0.0.1:8080` and open `http://localhost:8081` |
 | no frames, `/snap` returns 503 | camera unplugged or another process owns `/dev/video0` |
-| cars pass but no track is stored | car outside the ROI or not moving enough: check `/debug.jpg`, tune `ROI` / `MIN_TRAVEL` |
+| cars pass but no track is stored | look in `ignored/<date>/` on S3: the JSON says why (ROI, travel, one detection); check `/debug.jpg`, tune `ROI` / `MIN_TRAVEL` |
 | parked car stored repeatedly | raise `MIN_TRAVEL` |
 | upload queue grows | S3 credentials or network; `/status` shows `last_error` |
 
@@ -245,6 +252,7 @@ car/<date>/<track>/       every other moving vehicle
     000.jpg 001.jpg …     crops, as the classifier sees them
     frame.jpg             one full frame
     annotated.jpg         the same frame with the car's box, verdict, path and the ROI, for a quick check
+ignored/<date>/<t>-<id>.json  a dropped track: reason, path, ROI (LOG_IGNORED); no images
 empty/<date>/<HH-MM>.jpg  empty street once an hour (synthetic-data backgrounds, motion tuning)
 ```
 

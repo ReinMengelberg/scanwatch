@@ -63,8 +63,10 @@ DET_IMGSZ = int(env("DET_IMGSZ", "416"))
 DET_CONF = float(env("DET_CONF", "0.25"))
 MIN_BOX = int(env("MIN_BOX", "40"))  # px, shorter side; must match training (crop.MIN_BOX)
 TRACK_IOU = float(env("TRACK_IOU", "0.2"))  # box overlap that continues a track
+PARKED_AFTER = float(env("PARKED_AFTER", "2"))  # seconds without moving: the track is a parked/waiting car
+PARKED_IOU = float(env("PARKED_IOU", "0.5"))  # ... and only continues on a box overlapping it this much
 TRACK_LOST = float(env("TRACK_LOST", "1.5"))  # seconds unseen before a track ends
-MIN_TRAVEL = float(env("MIN_TRAVEL", "0.15"))  # fraction of frame width a track must move (parked cars don't)
+MIN_TRAVEL = float(env("MIN_TRAVEL", "0.1"))  # fraction of frame width a track must move (parked cars don't)
 CROPS_PER_TRACK = int(env("CROPS_PER_TRACK", "3"))
 
 # Stage 2 (optional until a model is trained)
@@ -85,6 +87,7 @@ EMPTY_QUIET = float(env("EMPTY_QUIET", "60"))  # no motion in the ROI for this l
 
 # Spool (SD card) + S3
 ANNOTATE = env("ANNOTATE", "1") == "1"  # also upload annotated.jpg (frame + boxes + path) per track
+LOG_IGNORED = env("LOG_IGNORED", "1") == "1"  # upload ignored/<date>/<track>.json (why a track was dropped)
 
 SPOOL_DIR = _path(env("SPOOL_DIR", "~/scanwatch/spool"))
 MIN_FREE_GB = float(env("MIN_FREE_GB", "2"))  # below this, drop the oldest spooled days

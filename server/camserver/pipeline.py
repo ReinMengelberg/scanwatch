@@ -3,6 +3,7 @@
 Spool layout (mirrors S3, see uploader.py):
   scancar/<date>/<HHMMSS-mmm>/{meta.json, 000.jpg.., frame.jpg}  moving vehicle, P(scancar) >= ROUTE_THRESHOLD
   car/<date>/<HHMMSS-mmm>/...                                     any other moving vehicle (or no model yet)
+  ignored/<date>/<HHMMSS-mmm>-<id>.json                          a track that was dropped, and why (LOG_IGNORED)
   empty/<date>/<HH-MM>.jpg                                        empty street
 The folder is the Pi's verdict, not a label: labels are made on the Mac.
 """
@@ -112,9 +113,31 @@ class Pipeline:
     def finish(self, tr: Track):
         if not self.tracker.valid(tr):
             self.stats["ignored"] += 1
-            self._recent({**self._info(tr), "stored": False})
+            info = {**self._info(tr), "stored": False, "reason": self._why(tr)}
+            self._recent(info)
+            if C.LOG_IGNORED:
+                self._log_ignored(tr, info)
             return
         self.store(tr)
+
+    def _why(self, tr: Track) -> str:
+        if len(tr.path) < 2:
+            return "one detection"
+        if not tr.in_roi:
+            return "never in the ROI"
+        return f"travel {tr.travel / self.tracker.w:.0%} < MIN_TRAVEL {C.MIN_TRAVEL:.0%}"
+
+    def _log_ignored(self, tr: Track, info: dict):
+        """No images: just enough to see on S3 which cars were dropped, where, and why."""
+        start = datetime.fromtimestamp(tr.t_start)
+        meta = dict(ts_start=start.isoformat(timespec="milliseconds"),
+                    ts_end=datetime.fromtimestamp(tr.t_last).isoformat(timespec="milliseconds"),
+                    reason=info["reason"], dets=info["dets"], travel=info["travel"], in_roi=tr.in_roi,
+                    frame_size=[self.tracker.w, self.tracker.h], roi=C.ROI, framing=self.framing(),
+                    path=[[round(t - tr.t_start, 2), *(round(v) for v in b), round(cf, 3)] for t, b, cf in tr.path])
+        name = f"{start.strftime('%H%M%S-%f')[:-3]}-{tr.id}.json"
+        _write_file(os.path.join(C.SPOOL_DIR, "ignored", start.strftime("%Y-%m-%d"), name),
+                    json.dumps(meta).encode())
 
     def _info(self, tr: Track) -> dict:
         return dict(id=tr.id, start=datetime.fromtimestamp(tr.t_start).strftime("%H:%M:%S"),

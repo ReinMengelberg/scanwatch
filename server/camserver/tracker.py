@@ -42,6 +42,19 @@ class Track:
         xs = [_center(b)[0] for _, b, _ in self.path]
         return max(xs) - min(xs) if xs else 0.0
 
+    def parked(self, window: float = C.PARKED_AFTER) -> bool:
+        """Has not moved (less than 10% of its width) for the last `window` seconds: a parked or waiting car."""
+        t_end, last = self.path[-1][0], self.path[-1][1]
+        if t_end - self.path[0][0] < window:
+            return False
+        cx, w = _center(last)[0], last[2] - last[0]
+        for t, b, _ in reversed(self.path):
+            if t_end - t > window:
+                return True
+            if abs(_center(b)[0] - cx) > 0.1 * w:
+                return False
+        return True
+
 
 def quality(box, conf, others, w, h) -> float:
     """Prefer big, confident, unclipped, unoccluded views (what the Pi classifies)."""
@@ -79,6 +92,8 @@ class Tracker:
                 continue
             if self.tracks[i].in_roi and not inside[j]:
                 continue  # a car on the road never hops onto one parked beside it
+            if score < C.PARKED_IOU and self.tracks[i].parked():
+                continue  # and a parked car's track never swallows a car driving past it
             last = self.tracks[i].path[-1][1]
             (cx, cy), (dx, dy) = _center(last), _center(vehicles[j][0])
             near = abs(cx - dx) < 0.6 * (last[2] - last[0]) and abs(cy - dy) < 0.6 * (last[3] - last[1])
@@ -107,9 +122,15 @@ class Tracker:
             tr.best_frame = (q, frame, persons, [v[0] for v in vehicles], box, conf)
 
     def expire(self, t: float, all_: bool = False) -> list[Track]:
-        done = [tr for tr in self.tracks if all_ or t - tr.t_last > C.TRACK_LOST]
+        """Tracks that ended: lost for TRACK_LOST, or a pass that came to a stop (parked, waiting, or stuck
+        on a parked car). A stopped pass is finished right away so it is stored and alerted on time; the
+        standing car gets a fresh track on the next frame, which is ignored as parked."""
+        done = [tr for tr in self.tracks if all_ or t - tr.t_last > C.TRACK_LOST or self._stopped(tr)]
         self.tracks = [tr for tr in self.tracks if tr not in done]
         return done
+
+    def _stopped(self, tr: Track) -> bool:
+        return tr.in_roi and tr.travel >= C.MIN_TRAVEL * self.w and tr.parked()
 
     def valid(self, tr: Track) -> bool:
         return tr.in_roi and len(tr.path) >= 2 and tr.travel >= C.MIN_TRAVEL * self.w

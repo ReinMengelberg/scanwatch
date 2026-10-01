@@ -10,7 +10,7 @@ import time
 
 from . import config as C
 
-KINDS = ("scancar", "car", "empty")  # spool/S3 top-level folders
+KINDS = ("scancar", "car", "ignored", "empty")  # spool/S3 top-level folders
 status = {"pending": 0, "uploaded": 0, "errors": 0, "last_error": ""}
 
 
@@ -59,7 +59,8 @@ def upload(s3, unit: str):
             s3.upload_file(os.path.join(unit, n), C.S3_BUCKET, key(n), ExtraArgs={"ContentType": ctype})
         shutil.rmtree(unit)
     else:
-        s3.upload_file(unit, C.S3_BUCKET, key(""), ExtraArgs={"ContentType": "image/jpeg"})
+        ctype = "application/json" if unit.endswith(".json") else "image/jpeg"
+        s3.upload_file(unit, C.S3_BUCKET, key(""), ExtraArgs={"ContentType": ctype})
         os.remove(unit)
 
 
