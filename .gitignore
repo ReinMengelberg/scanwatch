@@ -12,3 +12,5 @@ train/datasets/
 train/runs/
 train/labels.csv
 server/spool/
+# default SPOOL_DIR when the repo is cloned to ~/scanwatch on the Pi
+/spool/
