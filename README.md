@@ -259,7 +259,7 @@ uv venv -p 3.12 .venv && uv pip install -p .venv/bin/python -r requirements.txt
 ../fetch-dataset.sh                # only download: S3 -> ../dataset (car/, scancar/ as on S3)
 .venv/bin/python pull.py           # S3 -> ../dataset, new tracks -> data/raw (car/ = auto "other")
 .venv/bin/python label.py          # review: s scancar · o other · h hard negative · k skip
-.venv/bin/python build_dataset.py  # -> datasets/scancar_cls/{train,val}, split by event
+.venv/bin/python build_dataset.py  # -> datasets/scancar_cls/{train,val}, split by event  (--all: no held-out events)
 .venv/bin/python train.py          # train on MPS, per-track eval, export -> ../server/models/scancar_cls_ncnn_model
 ```
 
@@ -268,8 +268,11 @@ uv venv -p 3.12 .venv && uv pip install -p .venv/bin/python -r requirements.txt
 - **Split.** One pass of a car is one event and never sits in both train and val. Positives are repeated
   in train until the classes are balanced.
 - **Evaluation** is per track, as the Pi decides: mean of the top-3 crop scores. The alert threshold
-  is set just above the best-scoring negative val track (never below 0.5) and written to
-  `threshold.json` inside the exported model; `CLS_THRESHOLD` in `.env` overrides it.
+  is **recall first**: just below the weakest scan car val track, between 0.15 and 0.3
+  (`eval.threshold_*`), written to `threshold.json` inside the exported model; `CLS_THRESHOLD` in `.env`
+  overrides it. A false alarm costs a glance, a missed scan car is gone; tighten once there is data.
+- **Deploy model**: with only a few scan cars, `build_dataset.py --all` puts every event in train (val
+  is then a copy, only to monitor training) so the deployed model has seen every scan car view.
 - **Augmentation** (`config.yaml` → `train`): no RandAugment, little hue/saturation jitter and a
   random crop that keeps ≥ 85% of the image, so the red stripes and the roof pod survive.
 - `python train.py --run <run>` evaluates and exports an existing run without training again.

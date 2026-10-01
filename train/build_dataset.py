@@ -6,7 +6,10 @@ train (split.neg_cap, 0 = all). Positives are repeated in train until the classe
 fewer scan cars than other cars, and yolo-cls has no class weights. Files are symlinks to data/raw.
 
   python build_dataset.py
+  python build_dataset.py --all    every event in train (val = the same files, only to monitor training):
+                                   for the model that gets deployed, when there are too few scan cars to hold one out
 """
+import argparse
 import shutil
 from collections import Counter
 
@@ -14,9 +17,12 @@ from scancar.common import CLASSES, DATASET, ROOT, assign_split, cfg, labelled_c
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--all", action="store_true", help="no held-out events: train on everything")
+    a = ap.parse_args()
     c = cfg()["split"]
     rows = labelled_crops()
-    split = assign_split(rows)
+    split = assign_split(rows, 0 if a.all else None)
     shutil.rmtree(DATASET, ignore_errors=True)
     for s in ("train", "val"):
         for cls in CLASSES:
@@ -33,9 +39,10 @@ def main():
     reps = max(1, round(len(neg) / max(1, len(pos))))
 
     counts = Counter()
+    val_pos = pos if a.all else by["val", "scancar"]
+    val_neg = neg if a.all else by["val", "other"] + by["val", "hard_neg"]
     for s, cls, items, n in (("train", "scancar", pos, reps), ("train", "other", neg, 1),
-                             ("val", "scancar", by["val", "scancar"], 1),
-                             ("val", "other", by["val", "other"] + by["val", "hard_neg"], 1)):
+                             ("val", "scancar", val_pos, 1), ("val", "other", val_neg, 1)):
         for r in items:
             src = (ROOT / r["crop"]).resolve()
             name = r["crop"].replace("/", "__")

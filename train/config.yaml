@@ -59,7 +59,10 @@ train:
 
 eval:
   topk: 3                       # track score = mean of top-k crop scores
-  fa_per_day: 1
+  # Alert threshold: just below the weakest scan car val track, within these bounds. Recall first:
+  # a false alarm costs a glance, a missed scan car is gone. Tighten later, when there is data.
+  threshold_min: 0.15
+  threshold_max: 0.3
 
 pi:                             # fill in to enable deploy
   host: ""                      # e.g. 10.10.0.x (WireGuard)

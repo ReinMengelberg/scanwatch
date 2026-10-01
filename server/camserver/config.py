@@ -73,7 +73,7 @@ CLS_IMGSZ = int(env("CLS_IMGSZ", "224"))
 CLS_THRESHOLD = env("CLS_THRESHOLD", "")  # alert threshold; empty = threshold.json next to CLS_MODEL
 # Which S3 folder a track lands in: scancar/ if P(scancar) >= this, else car/. Deliberately lower than
 # the alert threshold: a false positive costs a glance, a false negative gets buried. No model = car/.
-ROUTE_THRESHOLD = float(env("ROUTE_THRESHOLD", "0.3"))
+ROUTE_THRESHOLD = float(env("ROUTE_THRESHOLD", "0.15"))
 
 # Discord alert when P(scancar) >= the alert threshold
 DISCORD_WEBHOOK_URL = env("DISCORD_WEBHOOK_URL", "")  # channel settings > Integrations > Webhooks

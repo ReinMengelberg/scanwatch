@@ -1,10 +1,10 @@
 {
- "threshold": 0.5,
- "run": "cls-20261001-160231",
+ "threshold": 0.3,
+ "run": "cls-20261001-180023",
  "topk": 3,
  "val_tracks": {
-  "scancar": 1,
-  "other": 10,
-  "caught": 0
+  "scancar": 2,
+  "other": 66,
+  "caught": 2
  }
 }
