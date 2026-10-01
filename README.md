@@ -88,7 +88,7 @@ server/                 runs on the Pi (Python 3.11)
 train/                  runs on the Mac (Python 3.12, PyTorch MPS)
   scancar/              shared code; crop.py is a symlink to server/camserver/crop.py
   bootstrap.py          frames -> labelled car crops
-  pull.py               S3 -> ../datasets/s3, index the Pi's tracks for labelling
+  pull.py               S3 -> ../datasets, index the Pi's tracks for labelling
   label.py              review UI (http://localhost:8765)
   build_dataset.py      labels -> train/val split by event
   train.py              train, evaluate per track, export NCNN + threshold to server/models/
@@ -251,7 +251,8 @@ The folder is the Pi's opinion, not a label. Labels are made on the Mac.
 cd train
 uv venv -p 3.12 .venv && uv pip install -p .venv/bin/python -r requirements.txt
 .venv/bin/python bootstrap.py      # frames in ../datasets/{scancar,othercar} -> data/raw + auto labels
-.venv/bin/python pull.py           # S3 -> ../datasets/s3, new tracks -> data/raw (car/ = auto "other")
+../fetch-dataset.sh                # only download: S3 -> ../datasets (car/, scancar/ as on S3)
+.venv/bin/python pull.py           # S3 -> ../datasets, new tracks -> data/raw (car/ = auto "other")
 .venv/bin/python label.py          # review: s scancar · o other · h hard negative · k skip
 .venv/bin/python build_dataset.py  # -> datasets/scancar_cls/{train,val}, split by event
 .venv/bin/python train.py          # train on MPS, per-track eval, export -> ../server/models/scancar_cls_ncnn_model

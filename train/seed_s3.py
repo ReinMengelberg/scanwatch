@@ -31,7 +31,7 @@ def main():
 
     tracks = defaultdict(list)
     for r in labelled_crops():
-        if r["synthetic"] != "1":
+        if r["source"] == "bootstrap" and r["synthetic"] != "1":  # not the Pi's tracks: those are on S3 already
             tracks[r["track_id"]].append(r)
 
     s3, bucket = (None, None) if a.dry_run else s3_client()
