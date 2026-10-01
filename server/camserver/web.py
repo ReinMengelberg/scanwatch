@@ -1,4 +1,4 @@
-"""HTTP API, bound to the WireGuard IP.
+"""HTTP API, bound to localhost (reach it through an SSH tunnel).
 
   GET  /            control page (stream + sliders + status)
   GET  /stream      multipart MJPEG

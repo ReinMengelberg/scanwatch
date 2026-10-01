@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Insta360 Link on a Pi: live MJPEG view + gimbal control, bound to the WireGuard IP.
+"""Insta360 Link on a Pi: live MJPEG view + gimbal control, bound to localhost (SSH tunnel).
 
 The server owns the camera (one process per V4L2 device), keeps the stream open so
 the gimbal stays out of privacy mode, and re-applies the saved framing on start.
@@ -28,12 +28,12 @@ from urllib.parse import parse_qs, urlparse
 import numpy as np
 
 DEV = os.environ.get("CAM_DEV", "/dev/video0")
-BIND = os.environ.get("BIND", "10.0.0.2")  # your Pi's wg0 address
+BIND = os.environ.get("BIND", "127.0.0.1")  # localhost; reach it through an SSH tunnel
 PORT = int(os.environ.get("PORT", "8080"))
 SIZE = os.environ.get("SIZE", "1280x720")
 CAM_FPS = os.environ.get("CAM_FPS", "15")  # a mode the camera supports (see --list-formats-ext)
 FPS = os.environ.get("FPS", "10")  # view stream rate, frames are dropped down to this
-# The Link sends ~400 KB MJPEG frames; re-encode the view stream so it fits through WireGuard.
+# The Link sends ~400 KB MJPEG frames; re-encode the view stream so it fits through the SSH tunnel.
 VIEW_WIDTH = os.environ.get("VIEW_WIDTH", "960")
 VIEW_QUALITY = os.environ.get("VIEW_QUALITY", "7")  # ffmpeg -q:v, 2 = best, 31 = worst
 STATE_FILE = os.environ.get("STATE_FILE", os.path.expanduser("~/.camserver.json"))

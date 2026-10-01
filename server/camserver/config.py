@@ -37,12 +37,12 @@ def _roi(v: str) -> list[tuple[float, float]]:
 
 # Camera + web
 CAM_DEV = env("CAM_DEV", "/dev/video0")
-BIND = env("BIND", "10.0.0.2")  # the Pi's wg0 address
+BIND = env("BIND", "127.0.0.1")  # localhost only; reach it through an SSH tunnel
 PORT = int(env("PORT", "8080"))
 SIZE = env("SIZE", "1280x720")
 CAM_FPS = env("CAM_FPS", "15")  # a mode the camera supports (v4l2-ctl --list-formats-ext)
 FPS = env("FPS", "10")  # processing/view rate, frames are dropped down to this
-# The Link sends ~400 KB MJPEG frames; re-encode so the view fits through WireGuard.
+# The Link sends ~400 KB MJPEG frames; re-encode so the view fits through the SSH tunnel.
 # 960 wide = 960x540, the frame size the models are trained on. Don't change one without the other.
 VIEW_WIDTH = env("VIEW_WIDTH", "960")
 VIEW_QUALITY = env("VIEW_QUALITY", "7")  # ffmpeg -q:v, 2 = best, 31 = worst

@@ -3,7 +3,7 @@
 # Settings come from server/.env (read by camserver/config.py).
 [Unit]
 Description=Street cam: capture, scan-car detection, S3 upload
-After=network-online.target wg-quick@wg0.service
+After=network-online.target
 Wants=network-online.target
 
 [Service]
