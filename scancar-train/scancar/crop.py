@@ -1,0 +1,51 @@
+"""The one crop function. Shared by training and camserver on the Pi: numpy + cv2 only.
+
+Copy this file to the Pi as-is (export_deploy.py ships it next to the models).
+"""
+import cv2
+import numpy as np
+
+PAD = 0.15        # all sides, relative to box size
+TOP_EXTRA = 0.15  # extra headroom so the roof pod is never clipped
+MIN_BOX = 40      # px (shorter side) in the 960x540 frame; smaller detections are ignored
+
+
+def pad_box(box, w, h, pad=PAD, top_extra=TOP_EXTRA):
+    """Pad an xyxy box and clamp it to a w x h image. Returns ints."""
+    x1, y1, x2, y2 = (float(v) for v in box)
+    bw, bh = x2 - x1, y2 - y1
+    x1 -= pad * bw
+    x2 += pad * bw
+    y1 -= (pad + top_extra) * bh
+    y2 += pad * bh
+    x1, y1 = max(0, int(round(x1))), max(0, int(round(y1)))
+    x2, y2 = min(w, int(round(x2))), min(h, int(round(y2)))
+    return x1, y1, x2, y2
+
+
+def crop(img: np.ndarray, box, pad=PAD, top_extra=TOP_EXTRA) -> np.ndarray:
+    """Crop a vehicle from a BGR frame using the padded, clamped box."""
+    h, w = img.shape[:2]
+    x1, y1, x2, y2 = pad_box(box, w, h, pad, top_extra)
+    return img[y1:y2, x1:x2].copy()
+
+
+def big_enough(box, min_box=MIN_BOX) -> bool:
+    x1, y1, x2, y2 = box
+    return min(x2 - x1, y2 - y1) >= min_box
+
+
+def blur_plate_zone(img: np.ndarray, boxes, frac=0.45) -> np.ndarray:
+    """AVG: blur the lower part of every vehicle box (where plates are) before storing a full frame.
+
+    No plate detection/OCR on purpose; it blurs the whole zone.
+    """
+    out = img.copy()
+    h, w = out.shape[:2]
+    for x1, y1, x2, y2 in boxes:
+        x1, x2 = max(0, int(x1)), min(w, int(x2))
+        y2 = min(h, int(y2))
+        y1 = max(0, int(y2 - frac * (y2 - y1)))
+        if x2 > x1 and y2 > y1:
+            out[y1:y2, x1:x2] = cv2.GaussianBlur(out[y1:y2, x1:x2], (0, 0), 12)
+    return out

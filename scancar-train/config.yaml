@@ -1,0 +1,63 @@
+# All paths are relative to this repo.
+frame_size: [960, 540]          # what the Pi stores; other inputs are resized to this
+
+detector:                       # stage 1, identical to the Pi
+  model: yolo11n.pt
+  imgsz: 416
+  classes: [2, 7]
+  conf: 0.25
+  agnostic_nms: true            # car+truck boxes on one vehicle -> one box
+
+bootstrap:
+  sources:                      # pre-sorted full frames
+    - {dir: ../datasets/scancar, label: scancar}
+    - {dir: ../datasets/othercar, label: other}
+  event_gap_s: 5                # frames closer than this (index.csv time) = same event
+  static_iou: 0.6               # a box seen at the same spot in >= static_frac of frames
+  static_frac: 0.5              #   is a parked car -> labelled "other"
+  # Frames without timestamps: one pass, split by view so val gets a real positive.
+  events:
+    340ac608: scan-0001-front
+    ad2eb96a: scan-0001-front
+    95f0ac80: scan-0001-rear
+    b1307830: scan-0001-rear
+    c23daf5b: scan-0001-rear
+
+dedupe:
+  max_hamming: 4                # pHash distance
+
+split:
+  val_frac: 0.3                 # by event hash; 0 = everything in train
+  neg_cap: 10                   # max negatives per positive in train (hard negatives always kept)
+  seed: 0
+
+synth:
+  seed: 0
+  n: {scancar: 300, other: 300} # paste both classes so "pasted" is not a shortcut for "scancar"
+  sam_model: mobile_sam.pt
+  # Polygon (960x540 px) where the bottom-centre of a pasted car may land.
+  lane: [[60, 360], [960, 340], [960, 410], [60, 430]]
+  scale_jitter: 0.2
+  flip_p: 0.5
+  occluder_p: 0.3               # vertical bar = the street-tree trunk
+  max_offscreen: 0.3            # fraction of a pasted car allowed outside the frame
+
+train:
+  model: yolo11n-cls.pt
+  imgsz: 224
+  epochs: 60
+  batch: 64
+  patience: 15
+  fliplr: 0.5
+  flipud: 0.0
+  erasing: 0.4
+
+eval:
+  topk: 3                       # track score = mean of top-k crop scores
+  fa_per_day: 1
+
+pi:                             # fill in to enable deploy
+  host: ""                      # e.g. 10.10.0.x (WireGuard)
+  user: pi
+  models_dir: /opt/scanwatch/models
+  service: camserver
