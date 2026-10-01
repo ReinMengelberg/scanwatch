@@ -28,7 +28,7 @@ REAR = "../dataset/scancar/c23daf5b-1a29-453d-bbd4-05a9c8b48587.jpg"
 OTHER = "../dataset/othercar/123732-162.jpg"  # tinted windows: no visible driver
 EMPTY = "../dataset/othercar/123744-820.jpg"  # emptiest frame: only the parked Tesla
 FRAMES = [SCAN, FRONT, REAR, OTHER, EMPTY]
-ROI = [(0, 0.75), (0.45, 0.62), (1, 0.48), (1, 0.65), (0.45, 0.82), (0, 0.93)]
+ROI = [(0, 0.74), (0.45, 0.61), (1, 0.48), (1, 0.69), (0.45, 0.86), (0, 0.96)]
 
 from ultralytics import YOLO  # noqa: E402
 
