@@ -111,19 +111,26 @@ class Pipeline:
     # --- track end -----------------------------------------------------------
 
     def finish(self, tr: Track):
-        info = dict(id=tr.id, start=datetime.fromtimestamp(tr.t_start).strftime("%H:%M:%S"),
-                    dets=len(tr.path), travel=round(tr.travel / self.tracker.w, 2), in_roi=tr.in_roi)
         if not self.tracker.valid(tr):
             self.stats["ignored"] += 1
-            self._recent({**info, "stored": False})
+            self._recent({**self._info(tr), "stored": False})
             return
+        self.store(tr)
+
+    def _info(self, tr: Track) -> dict:
+        return dict(id=tr.id, start=datetime.fromtimestamp(tr.t_start).strftime("%H:%M:%S"),
+                    dets=len(tr.path), travel=round(tr.travel / self.tracker.w, 2), in_roi=tr.in_roi)
+
+    def store(self, tr: Track, day: str | None = None, track_id: str | None = None, tag: str = "") -> str:
+        """Classify, alert, write the spool unit. Returns its path. day/track_id/tag: see test.py."""
+        info = self._info(tr)
         crops = pick_crops(tr)
         scores = self.clf([c[4] for c in crops]) if self.clf else []
         score = float(np.mean(sorted(scores, reverse=True)[:3])) if scores else None
         alert = score is not None and score >= self.clf.threshold
         route = "scancar" if score is not None and score >= C.ROUTE_THRESHOLD else "car"
         start = datetime.fromtimestamp(tr.t_start)
-        track_id = start.strftime("%H%M%S-%f")[:-3]
+        track_id = track_id or start.strftime("%H%M%S-%f")[:-3]
 
         _, frame, persons, vehicles, box, conf = tr.best_frame
         files = {f"{i:03d}.jpg": _enc(c[4]) for i, c in enumerate(crops)}
@@ -135,7 +142,7 @@ class Pipeline:
             zoom = crop(frame, box)
             zoom = cv2.resize(zoom, (640, round(640 * zoom.shape[0] / zoom.shape[1])), interpolation=cv2.INTER_CUBIC)
             self.notifier.alert(track_id, tr.t_start, score,
-                                {"scancar.jpg": annotated, "closeup.jpg": _enc(zoom)})
+                                {"scancar.jpg": annotated, "closeup.jpg": _enc(zoom)}, tag=tag)
         meta = dict(
             track_id=track_id,
             ts_start=start.isoformat(timespec="milliseconds"),
@@ -154,7 +161,8 @@ class Pipeline:
             route=route,
         )
         files["meta.json"] = json.dumps(meta, indent=1).encode()
-        _write_dir(os.path.join(C.SPOOL_DIR, route, start.strftime("%Y-%m-%d"), track_id), files)
+        unit = os.path.join(C.SPOOL_DIR, route, day or start.strftime("%Y-%m-%d"), track_id)
+        _write_dir(unit, files)
 
         self.stats["tracks"] += 1
         self.stats["alerts"] += alert
@@ -162,6 +170,7 @@ class Pipeline:
         s = f" P(scancar)={score:.2f}" if score is not None else ""
         print(f"{'SCANCAR ' if alert else ''}{route}/{track_id}: {len(tr.path)} dets, travel {info['travel']:.0%}{s}",
               flush=True)
+        return unit
 
     def _recent(self, info):
         self.recent = ([info] + self.recent)[:20]

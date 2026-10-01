@@ -24,7 +24,6 @@ main() {
   stage=$(mktemp -d "$(dirname "$dest")/.scanwatch-new.XXXXXX")
   cp -a "$src/server/camserver" "$src/server/setup.sh" "$src/server/requirements.txt" \
         "$src/server/camserver.service" "$src/server/.env.example" "$stage/"
-  rm -f "$stage/camserver/replay.py"
   find "$stage" \( -name __pycache__ -o -name .DS_Store \) -prune -exec rm -rf {} +
 
   # stop the running service first, so nothing writes to the spool while it moves (setup.sh restarts it)

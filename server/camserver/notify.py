@@ -23,7 +23,7 @@ class Discord:
         self.status = {"sent": 0, "skipped": 0, "errors": 0, "last_error": ""}
         threading.Thread(target=self._run, daemon=True).start()
 
-    def alert(self, track_id: str, t: float, score: float, images: dict[str, bytes]):
+    def alert(self, track_id: str, t: float, score: float, images: dict[str, bytes], tag: str = ""):
         """Queue an alert for a track starting at epoch time t; never blocks the pipeline. One scan car
         can split into two tracks, so alerts within DISCORD_MIN_GAP seconds of the previous one are dropped."""
         if t - self.last_sent < C.DISCORD_MIN_GAP:
@@ -32,6 +32,8 @@ class Discord:
             return
         self.last_sent = t
         text = f"🚨 **Scan car** spotted at {time.strftime('%H:%M:%S', time.localtime(t))} (P = {score:.0%})"
+        if tag:
+            text += f" · {tag}"
         try:
             self.q.put_nowait((text, images, track_id))
         except queue.Full:
@@ -52,6 +54,7 @@ class Discord:
                     self.status["errors"] += 1
                     self.status["last_error"] = f"{time.strftime('%H:%M:%S')} {type(e).__name__}: {e}"[:300]
                     time.sleep(10 * (attempt + 1))
+            self.q.task_done()  # lets a script wait with q.join() until its alerts are out
 
 
 class RateLimited(Exception):
