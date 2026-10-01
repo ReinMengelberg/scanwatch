@@ -16,7 +16,6 @@ import cv2
 import numpy as np
 
 from . import config as C
-from .crop import crop
 from .tracker import Track, Tracker, pick_crops
 
 JPEG = [cv2.IMWRITE_JPEG_QUALITY, 92]
@@ -139,10 +138,7 @@ class Pipeline:
         if C.ANNOTATE:
             files["annotated.jpg"] = annotated
         if alert and self.notifier:
-            zoom = crop(frame, box)
-            zoom = cv2.resize(zoom, (640, round(640 * zoom.shape[0] / zoom.shape[1])), interpolation=cv2.INTER_CUBIC)
-            self.notifier.alert(track_id, tr.t_start, score,
-                                {"scancar.jpg": annotated, "closeup.jpg": _enc(zoom)}, tag=tag)
+            self.notifier.alert(track_id, tr.t_start, score, {"scancar.jpg": annotated}, tag=tag)
         meta = dict(
             track_id=track_id,
             ts_start=start.isoformat(timespec="milliseconds"),

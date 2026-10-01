@@ -5,11 +5,13 @@
 
 Per image: resize to the camera's 960x540, detect, keep the vehicles whose wheels are in the ROI, crop,
 classify. Every vehicle on the road becomes a one-frame track, written like a live one (crops, frame.jpg,
-annotated.jpg, meta.json) under <route>/seed/<image>[-<n>], then uploaded: scancar/seed/ or car/seed/ on S3.
-Alerts go to Discord as usual, tagged "test"; DISCORD_MIN_GAP does not apply.
+annotated.jpg, meta.json) under <route>/seed/<image>[-<n>]. Only annotated.jpg is uploaded, to
+scancar/seed/<image>/ or car/seed/<image>/ on S3; the rest stays in --spool, or is deleted without it.
+Alerts go to Discord as usual (the annotated image), tagged "test"; DISCORD_MIN_GAP does not apply.
 """
 import argparse
 import os
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -27,6 +29,7 @@ def main():
     # settings are read at import, so override before importing the package modules
     os.environ["SPOOL_DIR"] = a.spool or tempfile.mkdtemp(prefix="camserver-test-")
     os.environ["DISCORD_MIN_GAP"] = "0"  # every test image may alert
+    os.environ["ANNOTATE"] = "1"  # annotated.jpg is what gets uploaded
     if a.det:
         os.environ["DET_MODEL"] = a.det
     if a.cls is not None:
@@ -61,13 +64,19 @@ def main():
             unit = pipe.store(tr, day="seed", track_id=tid, tag=f"test: {img_path.name}")
             n += 1
             if s3:
-                uploader.upload(s3, unit)
-                print(f"  uploaded s3://{C.S3_BUCKET}/{os.path.relpath(unit, C.SPOOL_DIR)}/")
+                key = "/".join(p for p in (C.S3_PREFIX, os.path.relpath(unit, C.SPOOL_DIR), "annotated.jpg") if p)
+                s3.upload_file(os.path.join(unit, "annotated.jpg"), C.S3_BUCKET, key,
+                               ExtraArgs={"ContentType": "image/jpeg"})
+                print(f"  uploaded s3://{C.S3_BUCKET}/{key}")
+                if not a.spool:
+                    shutil.rmtree(unit)
     if notifier:
         notifier.q.join()
         print(f"\ndiscord: {notifier.status}")
     print(f"{len(a.images)} images, {n} tracks, {pipe.stats['alerts']} alerts"
           + ("" if s3 else f", spool {C.SPOOL_DIR}"))
+    if s3 and not a.spool:
+        shutil.rmtree(C.SPOOL_DIR, ignore_errors=True)  # the temp spool, emptied by the uploads
 
 
 if __name__ == "__main__":

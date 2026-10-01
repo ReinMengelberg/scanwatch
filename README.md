@@ -222,19 +222,24 @@ The detector lives in `server/models/yolo11n_416_ncnn_model`.
 | `/stream`, `/snap`, `/state`, `POST /set` | MJPEG stream, snapshot, gimbal |
 
 **Discord alerts.** With `DISCORD_WEBHOOK_URL` set, the Pi posts every scan car above the alert
-threshold, with the annotated frame and a close-up. Alerts within `DISCORD_MIN_GAP` seconds are
+threshold, with the annotated frame (box, verdict, path, ROI). Alerts within `DISCORD_MIN_GAP` seconds are
 merged. This needs a trained classifier (`CLS_MODEL`); until then the Pi only collects.
 
-**Tune without the Pi.** Replay a folder of frames or a video through the full pipeline on the Mac:
+**Test images.** Run single images through the pipeline, on the Mac (from `server/`) or the Pi.
+No motion gate, no tracking: each image is resized to 960×540, the vehicles with their wheels in the ROI
+are cropped and classified, and every one becomes a track like a live one. Only its `annotated.jpg` is
+uploaded, to `scancar/seed/<image>/` or `car/seed/<image>/`, and alerts go to Discord as usual, tagged "test":
 
 ```bash
-.venv/bin/python -m camserver.replay street.mp4 --det models/yolo11n_416_ncnn_model --spool /tmp/spool
+.venv/bin/python -m camserver.test ../dataset/scancar/*.jpg
+.venv/bin/python -m camserver.test img.jpg --no-upload --no-notify --spool /tmp/spool   # dry run
 ```
 
 ## S3 layout
 
 ```
 scancar/<date>/<track>/   Pi thinks: scan car (P ≥ ROUTE_THRESHOLD)
+{scancar,car}/seed/<image>/ test images (camserver.test), same layout
 car/<date>/<track>/       every other moving vehicle
     meta.json             times, path, boxes, scores, model version (uploaded last = track complete)
     000.jpg 001.jpg …     crops, as the classifier sees them
