@@ -34,18 +34,21 @@ training: 15% padding on all sides plus 15% extra on top, so the roof pod is nev
 ### Only cars that drive past
 
 Motion detection alone fires on pedestrians, cyclists, shadows and headlights. Here it only *wakes up* the
-detector; what gets stored is decided by three filters:
+detector; what gets stored is decided by these filters, all tuned to drop as little as possible (a false
+positive costs a glance, a missed scan car is gone):
 
 - **Class filter**: only car/truck count. People and bikes are never tracked.
 - **ROI**: only the road counts, not the sidewalks or the bike racks. The polygon follows the road
   through its bend in the middle of the frame, and a car counts as on the road when the bottom centre of
   its box (where the wheels touch) is inside it. Once a track is on the road it never jumps to a
   detection outside it, so a passing car's track never hops onto the Tesla parked beside the road.
-- **Travel**: a track must move ≥ 10% of the frame width, so the parked Tesla in front of the window
+- **Travel**: a track must move ≥ 5% of the frame width (recall first), so the parked Tesla in front of the window
   never becomes an upload, no matter how often someone walks by.
 - **No hopping**: once a track is on the road it never continues onto a box whose wheels are off the
   road, and a parked car's track (still for `PARKED_AFTER` s) only continues on a box that clearly
   overlaps it, so a car driving past is never swallowed by a parked one.
+- **Fast cars**: each track is matched where the car *should* be now (its last position moved on at its
+  speed), so a car crossing the frame in under a second is still one track instead of many short ones.
 - **Stop = done**: a pass that comes to a stop (parking, waiting, stuck behind a parked car) is finished
   after `PARKED_AFTER` s, so it is stored and alerted on time; the standing car gets a fresh track.
 - **Dropped tracks are logged**: every ignored track goes to `ignored/<date>/` on S3 as a small JSON with

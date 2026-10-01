@@ -51,22 +51,23 @@ STATE_FILE = _path(env("STATE_FILE", "~/.camserver.json"))
 # Motion gate: only decides when to run the detector, never what gets stored
 MOTION_SIZE = env("MOTION_SIZE", "160x90")  # analysis resolution, same aspect ratio as SIZE
 MOTION_DIFF = float(env("MOTION_DIFF", "25"))  # per-pixel gray delta that counts as changed
-MOTION_MIN = float(env("MOTION_MIN", "0.005"))  # changed fraction of the ROI that wakes the detector
-MOTION_MAX = float(env("MOTION_MAX", "0.6"))  # above this: exposure jump or gimbal move, ignore
-MOTION_HOLD = float(env("MOTION_HOLD", "3"))  # keep detecting this long after the last motion
+MOTION_MIN = float(env("MOTION_MIN", "0.002"))  # changed fraction of the ROI that wakes the detector
+MOTION_MAX = float(env("MOTION_MAX", "0.85"))  # above this: exposure jump or gimbal move, ignore
+MOTION_HOLD = float(env("MOTION_HOLD", "5"))  # keep detecting this long after the last motion
 BG_RATE = float(env("BG_RATE", "0.1"))  # background adaptation per frame
 ROI = _roi(env("ROI", ""))  # road polygon; motion and tracks only count inside it
 
 # Detection + tracking
 DET_MODEL = _path(env("DET_MODEL", "models/yolo11n_416_ncnn_model"))
 DET_IMGSZ = int(env("DET_IMGSZ", "416"))
-DET_CONF = float(env("DET_CONF", "0.25"))
+DET_CONF = float(env("DET_CONF", "0.15"))
 MIN_BOX = int(env("MIN_BOX", "40"))  # px, shorter side; must match training (crop.MIN_BOX)
 TRACK_IOU = float(env("TRACK_IOU", "0.2"))  # box overlap that continues a track
+FIRST_JUMP = float(env("FIRST_JUMP", "1.5"))  # box widths a car may jump between its 1st and 2nd detection (fast cars)
 PARKED_AFTER = float(env("PARKED_AFTER", "2"))  # seconds without moving: the track is a parked/waiting car
 PARKED_IOU = float(env("PARKED_IOU", "0.5"))  # ... and only continues on a box overlapping it this much
-TRACK_LOST = float(env("TRACK_LOST", "1.5"))  # seconds unseen before a track ends
-MIN_TRAVEL = float(env("MIN_TRAVEL", "0.1"))  # fraction of frame width a track must move (parked cars don't)
+TRACK_LOST = float(env("TRACK_LOST", "2.5"))  # seconds unseen before a track ends
+MIN_TRAVEL = float(env("MIN_TRAVEL", "0.05"))  # fraction of frame width a track must move (parked cars don't)
 CROPS_PER_TRACK = int(env("CROPS_PER_TRACK", "3"))
 
 # Stage 2 (optional until a model is trained)

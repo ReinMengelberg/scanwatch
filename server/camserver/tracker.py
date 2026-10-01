@@ -42,6 +42,16 @@ class Track:
         xs = [_center(b)[0] for _, b, _ in self.path]
         return max(xs) - min(xs) if xs else 0.0
 
+    def predict(self, t: float) -> tuple:
+        """Where the box should be at time t: the last box moved on at the recent horizontal speed."""
+        (t1, b1, _) = self.path[-1]
+        if len(self.path) < 2:
+            return b1
+        t0, b0, _ = self.path[max(0, len(self.path) - 4)]  # speed over the last few detections
+        vx = (_center(b1)[0] - _center(b0)[0]) / max(t1 - t0, 1e-3)
+        dx = vx * (t - t1)
+        return (b1[0] + dx, b1[1], b1[2] + dx, b1[3])
+
     def parked(self, window: float = C.PARKED_AFTER) -> bool:
         """Has not moved (less than 10% of its width) for the last `window` seconds: a parked or waiting car."""
         t_end, last = self.path[-1][0], self.path[-1][1]
@@ -84,8 +94,9 @@ class Tracker:
         """Feed one detected frame. Returns tracks that just ended (moved or not; see valid())."""
         unmatched = list(range(len(vehicles)))
         inside = [self._inside(v[0]) for v in vehicles]
-        pairs = sorted(((iou(tr.path[-1][1], vehicles[j][0]), i, j)
-                        for i, tr in enumerate(self.tracks) for j in unmatched), reverse=True)
+        pred = [tr.predict(t) for tr in self.tracks]  # fast cars move more than their own width between frames
+        pairs = sorted(((iou(pred[i], vehicles[j][0]), i, j)
+                        for i in range(len(self.tracks)) for j in unmatched), reverse=True)
         used_t, used_d = set(), set()
         for score, i, j in pairs:
             if i in used_t or j in used_d:
@@ -94,9 +105,11 @@ class Tracker:
                 continue  # a car on the road never hops onto one parked beside it
             if score < C.PARKED_IOU and self.tracks[i].parked():
                 continue  # and a parked car's track never swallows a car driving past it
-            last = self.tracks[i].path[-1][1]
+            last = pred[i]
             (cx, cy), (dx, dy) = _center(last), _center(vehicles[j][0])
-            near = abs(cx - dx) < 0.6 * (last[2] - last[0]) and abs(cy - dy) < 0.6 * (last[3] - last[1])
+            # no speed yet (one detection): allow a wider sideways jump, the lanes are told apart vertically
+            reach = 0.6 if len(self.tracks[i].path) > 1 else C.FIRST_JUMP
+            near = abs(cx - dx) < reach * (last[2] - last[0]) and abs(cy - dy) < 0.6 * (last[3] - last[1])
             if score >= C.TRACK_IOU or near:
                 used_t.add(i)
                 used_d.add(j)
