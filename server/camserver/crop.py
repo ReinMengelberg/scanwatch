@@ -36,10 +36,10 @@ def big_enough(box, min_box=MIN_BOX) -> bool:
 
 
 def blur_plate_zone(img: np.ndarray, boxes, frac=0.45) -> np.ndarray:
-    """AVG: blur the lower part of every vehicle box (where plates are) before storing a full frame.
+    """Blur the lower part of every vehicle box (where plates are). Used for the README images only.
 
     No plate detection/OCR on purpose; it blurs the whole zone. Pass boxes from a low-confidence
-    detection pass (see BLUR_* in camserver): a missed car keeps its plate.
+    detection pass: a missed car keeps its plate.
     """
     out = img.copy()
     h, w = out.shape[:2]

@@ -3,7 +3,7 @@
 Spool layout (mirrors S3, see uploader.py):
   scancar/<date>/<HHMMSS-mmm>/{meta.json, 000.jpg.., frame.jpg}  moving vehicle, P(scancar) >= ROUTE_THRESHOLD
   car/<date>/<HHMMSS-mmm>/...                                     any other moving vehicle (or no model yet)
-  empty/<date>/<HH-MM>.jpg                                        empty street, plates/people blurred
+  empty/<date>/<HH-MM>.jpg                                        empty street
 The folder is the Pi's verdict, not a label: labels are made on the Mac.
 """
 import json
@@ -16,21 +16,10 @@ import cv2
 import numpy as np
 
 from . import config as C
-from .crop import blur_plate_zone, crop
+from .crop import crop
 from .tracker import Track, Tracker, pick_crops
 
 JPEG = [cv2.IMWRITE_JPEG_QUALITY, 92]
-
-
-def anonymize(frame, vehicles, persons):
-    """AVG: blur plate zones of every vehicle and every person entirely, before a full frame is stored."""
-    out = blur_plate_zone(frame, vehicles)
-    h, w = out.shape[:2]
-    for x1, y1, x2, y2 in persons:
-        x1, y1, x2, y2 = max(0, int(x1)), max(0, int(y1)), min(w, int(x2)), min(h, int(y2))
-        if x2 > x1 and y2 > y1:
-            out[y1:y2, x1:x2] = cv2.GaussianBlur(out[y1:y2, x1:x2], (0, 0), 15)
-    return out
 
 
 RED, GREEN, GREY, YELLOW = (77, 72, 229), (108, 164, 48), (170, 170, 170), (0, 200, 255)
@@ -98,10 +87,6 @@ class Pipeline:
         self.stats = {"tracks": 0, "ignored": 0, "alerts": 0, "empty": 0}
         self.recent: list[dict] = []  # last finished tracks, for /status
 
-    def anonymize(self, frame, vehicles, persons):
-        bv, bp = self.det.blur_boxes(frame)
-        return anonymize(frame, list(vehicles) + bv, list(persons) + bp)
-
     # --- per frame -----------------------------------------------------------
 
     def step(self, t: float, frame):
@@ -142,13 +127,12 @@ class Pipeline:
 
         _, frame, persons, vehicles, box, conf = tr.best_frame
         files = {f"{i:03d}.jpg": _enc(c[4]) for i, c in enumerate(crops)}
-        clean = self.anonymize(frame, vehicles, persons)
-        files["frame.jpg"] = _enc(clean)
-        annotated = _enc(annotate(clean, tr, box, conf, vehicles, route, score)) if C.ANNOTATE or alert else None
+        files["frame.jpg"] = _enc(frame)
+        annotated = _enc(annotate(frame, tr, box, conf, vehicles, route, score)) if C.ANNOTATE or alert else None
         if C.ANNOTATE:
             files["annotated.jpg"] = annotated
         if alert and self.notifier:
-            zoom = crop(clean, box)  # from the blurred frame, never the raw crop: Discord is a third party
+            zoom = crop(frame, box)
             zoom = cv2.resize(zoom, (640, round(640 * zoom.shape[0] / zoom.shape[1])), interpolation=cv2.INTER_CUBIC)
             self.notifier.alert(track_id, tr.t_start, score,
                                 {"scancar.jpg": annotated, "closeup.jpg": _enc(zoom)})
@@ -195,7 +179,7 @@ class Pipeline:
             return
         when = datetime.fromtimestamp(t)
         path = os.path.join(C.SPOOL_DIR, "empty", when.strftime("%Y-%m-%d"), when.strftime("%H-%M") + ".jpg")
-        _write_file(path, _enc(self.anonymize(frame, [v[0] for v in vehicles], persons)))
+        _write_file(path, _enc(frame))
         self.stats["empty"] += 1
         print(f"empty frame {os.path.relpath(path, C.SPOOL_DIR)}", flush=True)
 

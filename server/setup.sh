@@ -77,7 +77,7 @@ if ! cmp -s requirements.txt .venv/.deployed-requirements.txt; then
 fi
 
 # Detector models are git-ignored: export them here when they weren't shipped by deploy.sh
-for size in 416 640; do
+for size in 416; do
   if [[ ! -d models/yolo11n_${size}_ncnn_model ]]; then
     echo "==> exporting models/yolo11n_${size}_ncnn_model (once, a few minutes)"
     mkdir -p models

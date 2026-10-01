@@ -1,4 +1,4 @@
-"""Discord alerts via a channel webhook. Only anonymized images are sent (Discord is a third party).
+"""Discord alerts via a channel webhook.
 
 Test the webhook from the Pi:
   .venv/bin/python -m camserver.notify                 text only

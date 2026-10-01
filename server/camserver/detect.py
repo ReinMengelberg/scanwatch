@@ -1,32 +1,18 @@
-"""Stage 1 (YOLO car/truck, plus person for blurring only) and stage 2 (scan-car classifier)."""
+"""Stage 1 (YOLO car/truck, plus person) and stage 2 (scan-car classifier)."""
 import json
-import os
 from pathlib import Path
 
 from . import config as C
 from .crop import big_enough
 
-PERSON, CAR, MOTORCYCLE, BUS, TRUCK = 0, 2, 3, 5, 7
+PERSON, CAR, TRUCK = 0, 2, 7
 
 
 class Detector:
-    def __init__(self, model: str = C.DET_MODEL, blur_model: str = C.BLUR_MODEL):
+    def __init__(self, model: str = C.DET_MODEL):
         from ultralytics import YOLO
 
         self.model = YOLO(model, task="detect")
-        if not os.path.exists(blur_model):
-            print(f"no {blur_model}: blurring with the main detector at {C.DET_IMGSZ}px (misses more cars)", flush=True)
-        self.blur_model = YOLO(blur_model, task="detect") if os.path.exists(blur_model) else self.model
-        self.blur_imgsz = C.BLUR_IMGSZ if self.blur_model is not self.model else C.DET_IMGSZ
-
-    def blur_boxes(self, bgr) -> tuple[list[tuple], list[tuple]]:
-        """(vehicles, persons) for anonymizing a full frame: low confidence, everything with a plate or a face."""
-        r = self.blur_model.predict(bgr, imgsz=self.blur_imgsz, conf=C.BLUR_CONF,
-                                    classes=[PERSON, CAR, MOTORCYCLE, BUS, TRUCK], verbose=False)[0]
-        vehicles, persons = [], []
-        for box, cls in zip(r.boxes.xyxy.tolist(), r.boxes.cls.tolist()):
-            (persons if int(cls) == PERSON else vehicles).append(tuple(box))
-        return vehicles, persons
 
     def __call__(self, bgr) -> tuple[list[tuple], list[tuple]]:
         """(vehicles [(box, conf)], persons [box]). Vehicles: car+truck merged by agnostic NMS."""

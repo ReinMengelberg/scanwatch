@@ -5,7 +5,7 @@ white cars (Opel Corsa-e, "Parkeercontrole") with a camera pod on the roof, scan
 
 ![A scan car detected in the street](docs/img/hero.jpg)
 
-<sub>All images in this repo are anonymized: plate zones and people are blurred, the scan car's plate included.</sub>
+<sub>License plates (the scan car's included) and people are blurred in the images in this README.</sub>
 
 ## How it works
 
@@ -176,7 +176,6 @@ rest), so on a fresh Mac clone export them once:
 uv venv -p 3.11 .venv && uv pip install -p .venv/bin/python -r requirements.txt pnnx
 mkdir -p models && cd models
 ../.venv/bin/yolo export model=yolo11n.pt format=ncnn imgsz=416 && mv yolo11n_ncnn_model yolo11n_416_ncnn_model
-../.venv/bin/yolo export model=yolo11n.pt format=ncnn imgsz=640 && mv yolo11n_ncnn_model yolo11n_640_ncnn_model
 cd ..
 ```
 
@@ -261,8 +260,7 @@ Rolling back: check out the previous commit on the Mac and run `./deploy.sh` aga
 
 ### On the Pi
 
-Models live in `server/models/`: `yolo11n_416_ncnn_model` (detection) and `yolo11n_640_ncnn_model`
-(a low-confidence pass that finds every plate and person to blur before a full frame is stored).
+The detector lives in `server/models/yolo11n_416_ncnn_model`.
 
 | Endpoint | |
 |---|---|
@@ -272,9 +270,8 @@ Models live in `server/models/`: `yolo11n_416_ncnn_model` (detection) and `yolo1
 | `/stream`, `/snap`, `/state`, `POST /set` | MJPEG stream, snapshot, gimbal |
 
 **Discord alerts.** With `DISCORD_WEBHOOK_URL` set, the Pi posts every scan car above the alert
-threshold, with the annotated frame and a close-up. Both images are cut from the anonymized frame,
-never from the raw crops. Alerts within `DISCORD_MIN_GAP` seconds are merged. This needs a trained
-classifier (`CLS_MODEL`); until then the Pi only collects.
+threshold, with the annotated frame and a close-up. Alerts within `DISCORD_MIN_GAP` seconds are
+merged. This needs a trained classifier (`CLS_MODEL`); until then the Pi only collects.
 
 **Tune without the Pi.** Replay a folder of frames or a video through the full pipeline on the Mac:
 
@@ -289,7 +286,7 @@ scancar/<date>/<track>/   Pi thinks: scan car (P ≥ ROUTE_THRESHOLD)
 car/<date>/<track>/       every other moving vehicle
     meta.json             times, path, boxes, scores, model version (uploaded last = track complete)
     000.jpg 001.jpg …     crops, as the classifier sees them
-    frame.jpg             one full frame, plates and people blurred
+    frame.jpg             one full frame
     annotated.jpg         the same frame with the car's box, verdict, path and the ROI, for a quick check
 empty/<date>/<HH-MM>.jpg  empty street once an hour (synthetic-data backgrounds, motion tuning)
 ```
@@ -311,7 +308,9 @@ Still to come: `pull.py` (S3 → local), `synth.py` (paste the scan car onto emp
 ## Privacy (AVG/GDPR)
 
 - Plates are never read, OCR'd or stored as text.
-- Full frames are anonymized on the Pi before they are written: plate zones of every vehicle and every
-  person are blurred, using a separate low-confidence detection pass so parked cars are covered too.
-- Crops are *not* blurred (the classifier has to see the car as it is), so they can contain plates.
-  The bucket is private and frames, crops and labels stay out of git (see `.gitignore`).
+- Frames and crops are stored as captured, so they can contain plates and people. The bucket is
+  private and frames, crops and labels stay out of git (see `.gitignore`).
+- Discord alerts contain unblurred images too.
+- The README images go into git, so they are anonymized: `docs/make_images.py` blurs plates with a
+  license-plate detector ([morsetechlab/yolov11-license-plate-detection](https://huggingface.co/morsetechlab/yolov11-license-plate-detection),
+  AGPL-3.0, Mac only) plus hand-checked boxes for plates it misses, and blurs people.

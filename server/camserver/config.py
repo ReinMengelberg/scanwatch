@@ -62,11 +62,6 @@ DET_MODEL = _path(env("DET_MODEL", "models/yolo11n_416_ncnn_model"))
 DET_IMGSZ = int(env("DET_IMGSZ", "416"))
 DET_CONF = float(env("DET_CONF", "0.25"))
 MIN_BOX = int(env("MIN_BOX", "40"))  # px, shorter side; must match training (crop.MIN_BOX)
-# Separate pass before a full frame is stored: bigger input, low confidence, persons + all vehicle
-# types, so parked cars the tracker ignores still get their plates blurred. Ship a 640 export for this.
-BLUR_MODEL = _path(env("BLUR_MODEL", "models/yolo11n_640_ncnn_model"))
-BLUR_IMGSZ = int(env("BLUR_IMGSZ", "640"))
-BLUR_CONF = float(env("BLUR_CONF", "0.05"))
 TRACK_IOU = float(env("TRACK_IOU", "0.2"))  # box overlap that continues a track
 TRACK_LOST = float(env("TRACK_LOST", "1.5"))  # seconds unseen before a track ends
 MIN_TRAVEL = float(env("MIN_TRAVEL", "0.15"))  # fraction of frame width a track must move (parked cars don't)
@@ -80,7 +75,7 @@ CLS_THRESHOLD = env("CLS_THRESHOLD", "")  # alert threshold; empty = threshold.j
 # the alert threshold: a false positive costs a glance, a false negative gets buried. No model = car/.
 ROUTE_THRESHOLD = float(env("ROUTE_THRESHOLD", "0.3"))
 
-# Discord alert when P(scancar) >= the alert threshold (only anonymized images are sent)
+# Discord alert when P(scancar) >= the alert threshold
 DISCORD_WEBHOOK_URL = env("DISCORD_WEBHOOK_URL", "")  # channel settings > Integrations > Webhooks
 DISCORD_MIN_GAP = float(env("DISCORD_MIN_GAP", "60"))  # seconds; one pass can split into two tracks
 
