@@ -27,7 +27,8 @@ def status() -> dict:
     pipe, motion = ctx["pipeline"], ctx["motion"]
     return dict(motion=round(motion.level, 4), detecting=motion.active(), live_tracks=len(pipe.tracker.tracks),
                 stats=pipe.stats, recent=pipe.recent, upload=uploader.status,
-                classifier=bool(pipe.clf), roi=C.ROI)
+                classifier=bool(pipe.clf), roi=C.ROI,
+                discord=pipe.notifier.status if pipe.notifier else None)
 
 
 def debug_jpeg() -> bytes | None:

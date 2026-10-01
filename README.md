@@ -70,9 +70,11 @@ The model gets better as the Pi collects data:
 
 ```
 server/                 runs on the Pi (Python 3.11)
-  camserver/            camera, motion gate, detector, tracker, uploader, web UI
+  camserver/            camera, motion gate, detector, tracker, uploader, Discord, web UI
+  models/               NCNN detector models (git-ignored, shipped by deploy.sh)
+  deploy.sh             deploy from the Mac: sync, install, restart
   .env.example          all settings, copy to .env
-  camserver.service     systemd unit
+  camserver.service     systemd unit (installed by deploy.sh)
 train/                  runs on the Mac (Python 3.12, PyTorch MPS)
   scancar/              shared code; crop.py is also used by the Pi
   bootstrap.py          frames -> labelled car crops
@@ -82,30 +84,154 @@ train/                  runs on the Mac (Python 3.12, PyTorch MPS)
 docs/                   README images (make_images.py regenerates them)
 ```
 
-## Server (Pi)
+## Deploying the server to the Pi
+
+Everything is deployed from the Mac with one script, [`server/deploy.sh`](server/deploy.sh). It syncs the
+code and models, (re)builds the Pi's Python environment when `requirements.txt` changed, installs the
+systemd unit and restarts the service. The Pi's `.env`, `.venv` and spool are never overwritten (unless you pass `--env`).
+
+### 1. One-time setup on the Pi
+
+Raspberry Pi 5, Raspberry Pi OS Bookworm (64-bit), the Insta360 Link on USB, WireGuard up.
+
+```bash
+sudo apt install -y ffmpeg v4l-utils python3-venv
+ip -4 addr show wg0          # note the WireGuard IP: this is BIND below
+```
+
+From the Mac, make sure SSH works without a password (the script runs several ssh commands):
+
+```bash
+ssh-copy-id pi@<wireguard-ip>
+```
+
+The script uses `sudo` for the systemd unit. That works out of the box on Raspberry Pi OS; if your
+user needs a password for sudo, the script stops and prints the command to run by hand.
+
+**Replacing the old server?** Only one process can own the camera, so stop it once:
+`sudo systemctl disable --now <old-service>` (or kill the `server.py` process).
+
+### 2. Configure on the Mac
+
+All settings live in `server/.env` (template: [`.env.example`](server/.env.example)). Edit them on the
+Mac and push them with `--env`, so there is one source of truth.
 
 ```bash
 cd server
-cp .env.example .env               # BIND = the Pi's WireGuard IP, S3_* credentials, ROI
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m camserver      # or: sudo cp camserver.service /etc/systemd/system/ && sudo systemctl enable --now camserver
+cp .env.example .env         # once
 ```
 
-Models go in `~/scanwatch/models/current/`: `yolo11n_ncnn_model` (416 px, detection) and
-`yolo11n_640_ncnn_model` (640 px, a low-confidence pass that finds every plate and person to blur
-before a full frame is stored). Without a classifier (`CLS_MODEL` empty), the Pi only collects.
+| Setting | Set to |
+|---|---|
+| `BIND` | the Pi's WireGuard IP; the web UI only listens there |
+| `S3_*` | endpoint, bucket, region and keys of the bucket |
+| `UPLOAD` | `0` for the first run, `1` once tracks look right |
+| `DISCORD_WEBHOOK_URL` | optional: channel settings → Integrations → Webhooks |
+| `ROI` | road polygon; the default fits the current camera framing |
+| `CLS_MODEL` | empty until a scan-car model is trained (the Pi then only collects) |
+
+`.env` holds secrets (S3 keys, webhook URL): it is git-ignored and pushed with mode 600.
+
+The detector models in `server/models/` are git-ignored too. On a fresh clone, export them once:
+
+```bash
+uv venv -p 3.11 .venv && uv pip install -p .venv/bin/python -r requirements.txt pnnx
+mkdir -p models && cd models
+../.venv/bin/yolo export model=yolo11n.pt format=ncnn imgsz=416 && mv yolo11n_ncnn_model yolo11n_416_ncnn_model
+../.venv/bin/yolo export model=yolo11n.pt format=ncnn imgsz=640 && mv yolo11n_ncnn_model yolo11n_640_ncnn_model
+cd ..
+```
+
+### 3. First deploy
+
+```bash
+./deploy.sh pi@<wireguard-ip> --env --logs
+```
+
+| Flag | |
+|---|---|
+| `--env` | also push your local `server/.env` (overwrites the Pi's) |
+| `--logs` | follow the service log afterwards (Ctrl-C to stop) |
+| `PI=pi@<ip>` | set once (`export PI=…`) and just run `./deploy.sh` |
+| `PI_DIR=…` | install path on the Pi, relative to home (default `scanwatch/server`) |
+| `PI_SERVICE=…` | systemd unit name (default `camserver`) |
+
+The first deploy creates the virtualenv and installs ultralytics/torch: about 10 minutes. After that a
+deploy takes seconds.
+
+### 4. Check that it works
+
+With `UPLOAD=0`, nothing leaves the Pi yet. Open from the Mac (over WireGuard):
+
+- `http://<wireguard-ip>:8080`: live view with a status line (motion, live/stored/ignored tracks, upload queue).
+- `http://<wireguard-ip>:8080/debug.jpg`: the ROI in yellow and green boxes on cars being tracked.
+  Refresh while a car passes.
+
+In the log (`--logs`, or `journalctl -u camserver -f` on the Pi) a passing car looks like:
+
+```
+car/093512-204: 18 dets, travel 64%
+```
+
+Pedestrians and the parked cars should produce **no** line. Stored tracks are in
+`~/scanwatch/spool/car/<date>/` on the Pi; look at an `annotated.jpg` to check the box and the path.
+
+Discord: `ssh pi@<wireguard-ip> 'cd scanwatch/server && .venv/bin/python -m camserver.notify'` posts a test message.
+
+### 5. Go live
+
+Set `UPLOAD=1` in `server/.env` and deploy again:
+
+```bash
+./deploy.sh --env
+```
+
+The spooled tracks upload within seconds; check them in the bucket under `car/<date>/`.
+
+### Updating
+
+| Changed | Run |
+|---|---|
+| code or models | `./deploy.sh` |
+| settings in `.env` | `./deploy.sh --env` |
+| `requirements.txt` | `./deploy.sh` (pip runs automatically) |
+| nothing, just restart | `ssh pi@<ip> sudo systemctl restart camserver` |
+
+Rolling back: check out the previous commit on the Mac and run `./deploy.sh` again.
+
+### Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| `Address already in use` / camera busy | the old server is still running (step 1) |
+| `Cannot assign requested address` | `BIND` is not the Pi's WireGuard IP, or wg0 is down |
+| no frames, `/snap` returns 503 | camera unplugged or another process owns `/dev/video0` |
+| cars pass but no track is stored | car outside the ROI or not moving enough: check `/debug.jpg`, tune `ROI` / `MIN_TRAVEL` |
+| parked car stored repeatedly | raise `MIN_TRAVEL` |
+| upload queue grows | S3 credentials or network; `/status` shows `last_error` |
+| `sudo needs a password` | run the printed command on the Pi, or allow passwordless sudo for your user |
+
+### On the Pi
+
+Models live in `server/models/`: `yolo11n_416_ncnn_model` (detection) and `yolo11n_640_ncnn_model`
+(a low-confidence pass that finds every plate and person to blur before a full frame is stored).
 
 | Endpoint | |
 |---|---|
 | `/` | live view, gimbal control, status |
 | `/debug.jpg` | latest frame with the ROI and live tracks drawn in, for tuning |
-| `/status` | motion level, live/stored/ignored tracks, upload queue |
+| `/status` | motion level, live/stored/ignored tracks, upload queue, Discord |
 | `/stream`, `/snap`, `/state`, `POST /set` | MJPEG stream, snapshot, gimbal |
 
-**Tune without the Pi.** Replay a folder of frames or a video through the full pipeline:
+**Discord alerts.** With `DISCORD_WEBHOOK_URL` set, the Pi posts every scan car above the alert
+threshold, with the annotated frame and a close-up. Both images are cut from the anonymized frame,
+never from the raw crops. Alerts within `DISCORD_MIN_GAP` seconds are merged. This needs a trained
+classifier (`CLS_MODEL`); until then the Pi only collects.
+
+**Tune without the Pi.** Replay a folder of frames or a video through the full pipeline on the Mac:
 
 ```bash
-.venv/bin/python -m camserver.replay street.mp4 --det models/yolo11n.pt --spool /tmp/spool
+.venv/bin/python -m camserver.replay street.mp4 --det models/yolo11n_416_ncnn_model --spool /tmp/spool
 ```
 
 ## S3 layout

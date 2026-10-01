@@ -23,7 +23,11 @@ env = os.environ.get
 
 
 def _path(v: str) -> str:
-    return os.path.expanduser(v) if v else v
+    """~ expanded; relative paths are relative to server/ (so models/... works from any cwd)."""
+    if not v:
+        return v
+    p = Path(os.path.expanduser(v))
+    return str(p if p.is_absolute() else ROOT / p)
 
 
 def _roi(v: str) -> list[tuple[float, float]]:
@@ -54,13 +58,13 @@ BG_RATE = float(env("BG_RATE", "0.1"))  # background adaptation per frame
 ROI = _roi(env("ROI", ""))  # road polygon; motion and tracks only count inside it
 
 # Detection + tracking
-DET_MODEL = _path(env("DET_MODEL", "~/scanwatch/models/current/yolo11n_ncnn_model"))
+DET_MODEL = _path(env("DET_MODEL", "models/yolo11n_416_ncnn_model"))
 DET_IMGSZ = int(env("DET_IMGSZ", "416"))
 DET_CONF = float(env("DET_CONF", "0.25"))
 MIN_BOX = int(env("MIN_BOX", "40"))  # px, shorter side; must match training (crop.MIN_BOX)
 # Separate pass before a full frame is stored: bigger input, low confidence, persons + all vehicle
 # types, so parked cars the tracker ignores still get their plates blurred. Ship a 640 export for this.
-BLUR_MODEL = _path(env("BLUR_MODEL", "~/scanwatch/models/current/yolo11n_640_ncnn_model"))
+BLUR_MODEL = _path(env("BLUR_MODEL", "models/yolo11n_640_ncnn_model"))
 BLUR_IMGSZ = int(env("BLUR_IMGSZ", "640"))
 BLUR_CONF = float(env("BLUR_CONF", "0.05"))
 TRACK_IOU = float(env("TRACK_IOU", "0.2"))  # box overlap that continues a track
@@ -69,12 +73,16 @@ MIN_TRAVEL = float(env("MIN_TRAVEL", "0.15"))  # fraction of frame width a track
 CROPS_PER_TRACK = int(env("CROPS_PER_TRACK", "3"))
 
 # Stage 2 (optional until a model is trained)
-CLS_MODEL = _path(env("CLS_MODEL", ""))  # e.g. ~/scanwatch/models/current/best_ncnn_model
+CLS_MODEL = _path(env("CLS_MODEL", ""))  # e.g. models/scancar_cls_ncnn_model
 CLS_IMGSZ = int(env("CLS_IMGSZ", "224"))
 CLS_THRESHOLD = env("CLS_THRESHOLD", "")  # alert threshold; empty = threshold.json next to CLS_MODEL
 # Which S3 folder a track lands in: scancar/ if P(scancar) >= this, else car/. Deliberately lower than
 # the alert threshold: a false positive costs a glance, a false negative gets buried. No model = car/.
 ROUTE_THRESHOLD = float(env("ROUTE_THRESHOLD", "0.3"))
+
+# Discord alert when P(scancar) >= the alert threshold (only anonymized images are sent)
+DISCORD_WEBHOOK_URL = env("DISCORD_WEBHOOK_URL", "")  # channel settings > Integrations > Webhooks
+DISCORD_MIN_GAP = float(env("DISCORD_MIN_GAP", "60"))  # seconds; one pass can split into two tracks
 
 # Empty-street frames (synth backgrounds, motion tuning)
 EMPTY_EVERY = float(env("EMPTY_EVERY", "3600"))  # seconds between empty frames

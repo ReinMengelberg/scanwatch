@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 
 from . import config as C
-from .crop import blur_plate_zone
+from .crop import blur_plate_zone, crop
 from .tracker import Track, Tracker, pick_crops
 
 JPEG = [cv2.IMWRITE_JPEG_QUALITY, 92]
@@ -90,8 +90,8 @@ def _enc(img) -> bytes:
 
 
 class Pipeline:
-    def __init__(self, detector, classifier=None, w: int = 960, h: int = 540, framing=None):
-        self.det, self.clf = detector, classifier
+    def __init__(self, detector, classifier=None, w: int = 960, h: int = 540, framing=None, notifier=None):
+        self.det, self.clf, self.notifier = detector, classifier, notifier
         self.tracker = Tracker(w, h)
         self.framing = framing or (lambda: {})
         self.last_empty = 0.0
@@ -144,8 +144,14 @@ class Pipeline:
         files = {f"{i:03d}.jpg": _enc(c[4]) for i, c in enumerate(crops)}
         clean = self.anonymize(frame, vehicles, persons)
         files["frame.jpg"] = _enc(clean)
+        annotated = _enc(annotate(clean, tr, box, conf, vehicles, route, score)) if C.ANNOTATE or alert else None
         if C.ANNOTATE:
-            files["annotated.jpg"] = _enc(annotate(clean, tr, box, conf, vehicles, route, score))
+            files["annotated.jpg"] = annotated
+        if alert and self.notifier:
+            zoom = crop(clean, box)  # from the blurred frame, never the raw crop: Discord is a third party
+            zoom = cv2.resize(zoom, (640, round(640 * zoom.shape[0] / zoom.shape[1])), interpolation=cv2.INTER_CUBIC)
+            self.notifier.alert(track_id, tr.t_start, score,
+                                {"scancar.jpg": annotated, "closeup.jpg": _enc(zoom)})
         meta = dict(
             track_id=track_id,
             ts_start=start.isoformat(timespec="milliseconds"),

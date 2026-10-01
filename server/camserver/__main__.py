@@ -2,7 +2,7 @@
 import threading
 from http.server import ThreadingHTTPServer
 
-from . import camera, uploader, web
+from . import camera, notify, uploader, web
 from . import config as C
 from .detect import Detector, load_classifier
 from .motion import Motion
@@ -16,7 +16,7 @@ def main():
     h = round(w * sh / sw / 2) * 2  # what ffmpeg's scale=W:-2 produces
 
     motion = Motion()
-    pipe = Pipeline(Detector(), load_classifier(), w, h, framing=lambda: dict(camera.state))
+    pipe = Pipeline(Detector(), load_classifier(), w, h, framing=lambda: dict(camera.state), notifier=notify.load())
     web.ctx.update(pipeline=pipe, motion=motion)
 
     threading.Thread(target=uploader.run, daemon=True).start()
