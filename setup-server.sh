@@ -6,7 +6,7 @@
 # A new version = the same command again. ~/scanwatch only holds what the server runs:
 # camserver/, setup.sh, requirements.txt, camserver.service, .env, plus the state that is kept
 # across installs (.env, .venv, models/, spool/). Also migrates the old layout (~/scanwatch/server/).
-# Options are passed on to setup.sh (e.g. --logs). Env: INSTALL_DIR (default ~/scanwatch).
+# Options are passed on to setup.sh (e.g. --logs). Env: INSTALL_DIR (default ~/scanwatch), SERVICE (camserver).
 set -euo pipefail
 
 main() {
@@ -26,6 +26,13 @@ main() {
         "$src/server/camserver.service" "$src/server/.env.example" "$stage/"
   rm -f "$stage/camserver/replay.py"
   find "$stage" \( -name __pycache__ -o -name .DS_Store \) -prune -exec rm -rf {} +
+
+  # stop the running service first, so nothing writes to the spool while it moves (setup.sh restarts it)
+  local service="${SERVICE:-camserver}"
+  if systemctl is-active -q "$service" 2>/dev/null; then
+    echo "==> stop $service"
+    if [[ $EUID == 0 ]]; then systemctl stop "$service"; else sudo systemctl stop "$service"; fi
+  fi
 
   # keep state from the previous install: flat layout, or the old one with everything in server/
   local f old
