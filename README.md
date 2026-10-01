@@ -187,7 +187,8 @@ All on the Pi:
 | nothing, just restart | `sudo systemctl restart camserver` |
 
 A trained classifier is git-ignored, so it doesn't come with the clone. Copy it over from the Mac once
-(`models/` is kept across installs), set `CLS_MODEL` and run `setup.sh`:
+(`models/` is kept across installs), then set `CLS_MODEL=models/scancar_cls_ncnn_model` in
+`~/scanwatch/.env` and run `~/scanwatch/setup.sh`:
 
 ```bash
 scp -r server/models/scancar_cls_ncnn_model pi@<pi-host>:scanwatch/models/
@@ -263,7 +264,7 @@ uv venv -p 3.12 .venv && uv pip install -p .venv/bin/python -r requirements.txt
   random crop that keeps ≥ 85% of the image, so the red stripes and the roof pod survive.
 - `python train.py --run <run>` evaluates and exports an existing run without training again.
 
-Then set `CLS_MODEL=models/scancar_cls_ncnn_model` in `server/.env` and `./deploy.sh --env`.
+Then copy the model to the Pi and set `CLS_MODEL` there (see [Updating](#updating)).
 Still to come: `synth.py` (paste the scan car onto empty streets).
 
 ## Privacy (AVG/GDPR)
