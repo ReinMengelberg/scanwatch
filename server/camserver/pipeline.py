@@ -121,10 +121,10 @@ class Pipeline:
         self.store(tr)
 
     def _why(self, tr: Track) -> str:
-        if len(tr.path) < 2:
-            return "one detection"
         if not tr.in_roi:
             return "never in the ROI"
+        if len(tr.path) <= C.SHORT_TRACK:
+            return "short track at a parked car"
         return f"travel {tr.travel / self.tracker.w:.0%} < MIN_TRAVEL {C.MIN_TRAVEL:.0%}"
 
     def _log_ignored(self, tr: Track, info: dict):

@@ -67,6 +67,7 @@ FIRST_JUMP = float(env("FIRST_JUMP", "1.5"))  # box widths a car may jump betwee
 PARKED_AFTER = float(env("PARKED_AFTER", "2"))  # seconds without moving: the track is a parked/waiting car
 PARKED_IOU = float(env("PARKED_IOU", "0.5"))  # ... and only continues on a box overlapping it this much
 TRACK_LOST = float(env("TRACK_LOST", "2.5"))  # seconds unseen before a track ends
+SHORT_TRACK = int(env("SHORT_TRACK", "3"))  # tracks this short (fast/blurred cars) are kept without travel; 0 = off
 MIN_TRAVEL = float(env("MIN_TRAVEL", "0.05"))  # fraction of frame width a track must move (parked cars don't)
 CROPS_PER_TRACK = int(env("CROPS_PER_TRACK", "3"))
 

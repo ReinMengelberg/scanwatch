@@ -47,6 +47,9 @@ positive costs a glance, a missed scan car is gone):
 - **No hopping**: once a track is on the road it never continues onto a box whose wheels are off the
   road, and a parked car's track (still for `PARKED_AFTER` s) only continues on a box that clearly
   overlaps it, so a car driving past is never swallowed by a parked one.
+- **Short tracks are kept**: a car seen only 1–3 times on the road (very fast, blurred, half hidden) is
+  stored even without travel, unless a parked car stands at that spot (`SHORT_TRACK`, 0 = off). This adds
+  some duplicate fragments of normal passes; that is the price of not missing the fast ones.
 - **Fast cars**: each track is matched where the car *should* be now (its last position moved on at its
   speed), so a car crossing the frame in under a second is still one track instead of many short ones.
 - **Stop = done**: a pass that comes to a stop (parking, waiting, stuck behind a parked car) is finished

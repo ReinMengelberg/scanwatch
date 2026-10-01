@@ -146,7 +146,19 @@ class Tracker:
         return tr.in_roi and tr.travel >= C.MIN_TRAVEL * self.w and tr.parked()
 
     def valid(self, tr: Track) -> bool:
-        return tr.in_roi and len(tr.path) >= 2 and tr.travel >= C.MIN_TRAVEL * self.w
+        if not tr.in_roi:
+            return False
+        if len(tr.path) >= 2 and tr.travel >= C.MIN_TRAVEL * self.w:
+            return True
+        return self._short_pass(tr)
+
+    def _short_pass(self, tr: Track) -> bool:
+        """Seen only SHORT_TRACK times or fewer on the road: a fast, blurred or half-hidden car. Kept (recall
+        first) unless a parked car stands right there: parked cars give long tracks, not short ones."""
+        if len(tr.path) > C.SHORT_TRACK:
+            return False
+        box = tr.path[-1][1]
+        return not any(o is not tr and o.parked() and iou(o.path[-1][1], box) > 0.3 for o in self.tracks)
 
 
 def pick_crops(tr: Track, n: int = C.CROPS_PER_TRACK) -> list:
