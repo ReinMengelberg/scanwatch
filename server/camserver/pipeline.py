@@ -1,8 +1,8 @@
 """Motion gate -> detector -> tracker -> (classifier) -> spool. Also the hourly empty-street frame.
 
 Spool layout (mirrors S3, see uploader.py):
-  scancar/<date>/<HHMMSS-mmm>/{meta.json, 000.jpg.., frame.jpg}  moving vehicle, P(scancar) >= ROUTE_THRESHOLD
-  car/<date>/<HHMMSS-mmm>/...                                     any other moving vehicle (or no model yet)
+  scancar/<date>/<HHMMSS-mmm>-<id>/{meta.json, 000.jpg.., frame.jpg}  moving vehicle, P(scancar) >= ROUTE_THRESHOLD
+  car/<date>/<HHMMSS-mmm>-<id>/...                                     any other moving vehicle (or no model yet)
   ignored/<date>/<HHMMSS-mmm>-<id>.json                          a track that was dropped, and why (LOG_IGNORED)
   empty/<date>/<HH-MM>.jpg                                        empty street
 The folder is the Pi's verdict, not a label: labels are made on the Mac.
@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import time
+import traceback
 from datetime import datetime
 
 import cv2
@@ -152,7 +153,7 @@ class Pipeline:
         alert = score is not None and score >= self.clf.threshold
         route = "scancar" if score is not None and score >= C.ROUTE_THRESHOLD else "car"
         start = datetime.fromtimestamp(tr.t_start)
-        track_id = track_id or start.strftime("%H%M%S-%f")[:-3]
+        track_id = track_id or f"{start.strftime('%H%M%S-%f')[:-3]}-{tr.id}"  # tr.id: two cars can start in one frame
 
         _, frame, persons, vehicles, box, conf = tr.best_frame
         files = {f"{i:03d}.jpg": _enc(c[4]) for i, c in enumerate(crops)}
@@ -213,7 +214,17 @@ class Pipeline:
 
 
 def run_live(pipe: Pipeline, motion, camera):
-    """Detector loop: only runs YOLO while there is motion in the ROI or a live track."""
+    """Detector loop. One bad track must not end it: this thread dying leaves the service up but blind."""
+    while True:
+        try:
+            _run_live(pipe, motion, camera)
+        except Exception:
+            traceback.print_exc()
+            time.sleep(1)
+
+
+def _run_live(pipe: Pipeline, motion, camera):
+    """Only runs YOLO while there is motion in the ROI or a live track."""
     fid = -1
     while True:
         t = time.time()
