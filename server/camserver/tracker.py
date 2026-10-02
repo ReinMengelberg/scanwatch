@@ -39,8 +39,11 @@ class Track:
 
     @property
     def travel(self) -> float:
-        xs = [_center(b)[0] for _, b, _ in self.path]
-        return max(xs) - min(xs) if xs else 0.0
+        """Horizontal movement of the centre or either side, whichever is largest: a car entering or leaving at
+        the frame edge is clipped there, so its centre barely moves while its free side does."""
+        if not self.path:
+            return 0.0
+        return max(max(xs) - min(xs) for xs in zip(*((b[0], _center(b)[0], b[2]) for _, b, _ in self.path)))
 
     def predict(self, t: float) -> tuple:
         """Where the box should be at time t: the last box moved on at the recent horizontal speed."""
